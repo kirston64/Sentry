@@ -1,43 +1,52 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Lock } from "lucide-react";
-import { TEAM_MEMBERS } from "@/lib/mock-data";
 import { useProfile } from "@/components/auth/profile-context";
 import { canCreateIncident } from "@/lib/rbac";
-import { addAuditEntry } from "@/lib/audit";
-import type { Incident, Severity } from "@/types/incident";
+import type { Severity } from "@/types/incident";
 
 interface CreateIncidentModalProps {
-  onSave: (incident: Incident) => void;
+  onSave: () => void;
   onClose: () => void;
 }
+
+interface UserOption { id: string; username: string; fullName: string }
 
 export function CreateIncidentModal({ onSave, onClose }: CreateIncidentModalProps) {
   const profile = useProfile();
   const [title, setTitle] = useState("");
   const [severity, setSeverity] = useState<Severity>("P3");
   const [description, setDescription] = useState("");
-  const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const canCreate = canCreateIncident(profile.role, severity);
 
-  const handleSave = () => {
-    if (!title.trim()) return;
-    const now = new Date().toISOString();
-    onSave({
-      id: `inc-${Date.now()}`,
-      title: title.trim(),
-      severity,
-      status: "investigating",
-      assigneeId,
-      createdAt: now,
-      resolvedAt: null,
-      timeline: [
-        { timestamp: now, message: description.trim() || "Инцидент создан", author: profile.github_username ?? "You" },
-      ],
+  useEffect(() => {
+    fetch("/api/users").then(r => r.json()).then(setUsers);
+  }, []);
+
+  const handleSave = async () => {
+    if (!title.trim() || !canCreate) return;
+    setSaving(true);
+
+    const res = await fetch("/api/incidents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim(),
+        severity,
+        assigneeId: assigneeId || null,
+        description: description.trim(),
+      }),
     });
-    addAuditEntry({ user: profile.github_username ?? "Unknown", action: "incident.create", target: title.trim(), details: severity });
+
+    if (res.ok) {
+      onSave();
+    }
+    setSaving(false);
   };
 
   return (
@@ -71,12 +80,8 @@ export function CreateIncidentModal({ onSave, onClose }: CreateIncidentModalProp
                 onChange={(e) => setSeverity(e.target.value as Severity)}
                 className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-border-focus"
               >
-                <option value="P1" disabled={!canCreateIncident(profile.role, "P1")}>
-                  P1 — Critical {!canCreateIncident(profile.role, "P1") ? "🔒" : ""}
-                </option>
-                <option value="P2" disabled={!canCreateIncident(profile.role, "P2")}>
-                  P2 — High {!canCreateIncident(profile.role, "P2") ? "🔒" : ""}
-                </option>
+                <option value="P1" disabled={!canCreateIncident(profile.role, "P1")}>P1 — Critical</option>
+                <option value="P2" disabled={!canCreateIncident(profile.role, "P2")}>P2 — High</option>
                 <option value="P3">P3 — Medium</option>
                 <option value="P4">P4 — Low</option>
               </select>
@@ -84,12 +89,12 @@ export function CreateIncidentModal({ onSave, onClose }: CreateIncidentModalProp
             <div>
               <label className="mb-1 block text-[10px] text-text-muted">Ответственный</label>
               <select
-                value={assigneeId ?? ""}
-                onChange={(e) => setAssigneeId(e.target.value || null)}
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
                 className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-border-focus"
               >
                 <option value="">Не назначен</option>
-                {TEAM_MEMBERS.map((m) => (
+                {users.map((m) => (
                   <option key={m.id} value={m.id}>{m.username}</option>
                 ))}
               </select>
@@ -114,11 +119,11 @@ export function CreateIncidentModal({ onSave, onClose }: CreateIncidentModalProp
           </button>
           <button
             onClick={handleSave}
-            disabled={!title.trim() || !canCreate}
+            disabled={!title.trim() || !canCreate || saving}
             className="rounded bg-error px-4 py-1.5 text-xs font-medium text-white hover:bg-error/80 disabled:opacity-50 flex items-center gap-1.5"
           >
             {!canCreate && <Lock className="h-3 w-3" />}
-            {canCreate ? "Создать инцидент" : "Нет доступа для этого severity"}
+            {saving ? "Создание..." : canCreate ? "Создать инцидент" : "Нет доступа"}
           </button>
         </div>
       </div>

@@ -5,7 +5,16 @@ import { Activity, Filter } from "lucide-react";
 import { useProfile } from "@/components/auth/profile-context";
 import { canViewActivity } from "@/lib/rbac";
 import { AccessDenied } from "@/components/auth/access-denied";
-import { getAuditLog, type AuditEntry } from "@/lib/audit";
+
+interface AuditEntry {
+  id: string;
+  userId: string;
+  action: string;
+  target: string;
+  details: string | null;
+  createdAt: string;
+  user: { username: string; fullName: string; role: string };
+}
 
 const actionColors: Record<string, string> = {
   deploy: "bg-accent/20 text-accent",
@@ -24,17 +33,23 @@ export default function ActivityPage() {
   const profile = useProfile();
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [actionFilter, setActionFilter] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setEntries(getAuditLog());
-
-    const handler = () => setEntries(getAuditLog());
-    window.addEventListener("sentry_audit", handler);
-    return () => window.removeEventListener("sentry_audit", handler);
+    fetch("/api/audit").then(r => r.json()).then(setEntries).finally(() => setLoading(false));
   }, []);
 
   if (!canViewActivity(profile.role)) {
     return <AccessDenied message="Журнал действий доступен только для Admin и Owner." />;
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded bg-surface" />
+        <div className="h-64 animate-pulse rounded-lg bg-surface" />
+      </div>
+    );
   }
 
   const actionTypes = [...new Set(entries.map((e) => e.action.split(".")[0]))];
@@ -48,7 +63,6 @@ export default function ActivityPage() {
         <span className="ml-2 text-xs text-text-muted">{entries.length} записей</span>
       </div>
 
-      {/* Filter */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />
@@ -96,9 +110,9 @@ export default function ActivityPage() {
               filtered.map((entry) => (
                 <tr key={entry.id} className="transition-colors hover:bg-surface-hover">
                   <td className="whitespace-nowrap px-4 py-2.5 text-xs text-text-muted">
-                    {new Date(entry.timestamp).toLocaleString("ru-RU")}
+                    {new Date(entry.createdAt).toLocaleString("ru-RU")}
                   </td>
-                  <td className="px-4 py-2.5 text-accent text-xs">{entry.user}</td>
+                  <td className="px-4 py-2.5 text-accent text-xs">{entry.user.fullName || entry.user.username}</td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${getActionColor(entry.action)}`}>
                       {entry.action}

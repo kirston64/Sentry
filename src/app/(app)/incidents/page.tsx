@@ -1,18 +1,37 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { AlertTriangle, Plus, Filter } from "lucide-react";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { IncidentCard } from "@/components/incidents/incident-card";
 import { CreateIncidentModal } from "@/components/incidents/create-incident-modal";
-import { SEED_INCIDENTS } from "@/lib/mock-data";
-import type { Incident, Severity } from "@/types/incident";
+import type { Severity } from "@/types/incident";
+
+interface IncidentData {
+  id: string;
+  title: string;
+  severity: Severity;
+  status: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  assignee: { id: string; username: string; fullName: string } | null;
+  creator: { id: string; username: string; fullName: string };
+  timeline: { id: string; message: string; createdAt: string; author: { username: string; fullName: string } }[];
+}
 
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+  const [incidents, setIncidents] = useState<IncidentData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "resolved">("all");
   const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
+
+  const fetchIncidents = useCallback(async () => {
+    const res = await fetch("/api/incidents");
+    if (res.ok) setIncidents(await res.json());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
 
   const filtered = useMemo(() => {
     return incidents.filter((inc) => {
@@ -23,10 +42,19 @@ export default function IncidentsPage() {
     });
   }, [incidents, statusFilter, severityFilter]);
 
-  const handleCreate = (incident: Incident) => {
-    setIncidents((prev) => [incident, ...prev]);
+  const handleCreated = () => {
     setModalOpen(false);
+    fetchIncidents();
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded bg-surface" />
+        {[1, 2, 3].map(i => <div key={i} className="h-20 animate-pulse rounded-lg bg-surface" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -47,7 +75,6 @@ export default function IncidentsPage() {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />
@@ -88,14 +115,27 @@ export default function IncidentsPage() {
 
       <div className="space-y-2">
         {filtered.map((incident) => (
-          <IncidentCard key={incident.id} incident={incident} />
+          <IncidentCard key={incident.id} incident={{
+            id: incident.id,
+            title: incident.title,
+            severity: incident.severity,
+            status: incident.status as "investigating" | "identified" | "monitoring" | "resolved",
+            assigneeId: incident.assignee?.id || null,
+            createdAt: incident.createdAt,
+            resolvedAt: incident.resolvedAt,
+            timeline: incident.timeline.map(e => ({
+              timestamp: e.createdAt,
+              message: e.message,
+              author: e.author.fullName || e.author.username,
+            })),
+          }} />
         ))}
         {filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-text-muted">Нет инцидентов</p>
         )}
       </div>
 
-      {modalOpen && <CreateIncidentModal onSave={handleCreate} onClose={() => setModalOpen(false)} />}
+      {modalOpen && <CreateIncidentModal onSave={handleCreated} onClose={() => setModalOpen(false)} />}
     </div>
   );
 }

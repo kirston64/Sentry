@@ -1,9 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Bell, X } from "lucide-react";
-import { getNotifications, markAllRead, getUnreadCount } from "@/lib/notifications";
-import type { Notification } from "@/types/notification";
+
+interface NotificationData {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  link?: string;
+}
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -22,31 +30,38 @@ const typeEmoji: Record<string, string> = {
   task_update: "TSK",
   member_joined: "NEW",
   issue_created: "ISS",
+  password_expiry: "PWD",
+  device_login: "DEV",
 };
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unread, setUnread] = useState(0);
 
-  useEffect(() => {
-    setNotifications(getNotifications());
-    setUnread(getUnreadCount());
-
-    const handler = () => {
-      setNotifications(getNotifications());
-      setUnread(getUnreadCount());
-    };
-    window.addEventListener("sentry_audit", handler);
-    return () => window.removeEventListener("sentry_audit", handler);
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications");
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data);
+        setUnread(data.filter((n: NotificationData) => !n.isRead).length);
+      }
+    } catch { /* ignore */ }
   }, []);
 
-  const handleOpen = () => {
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  const handleOpen = async () => {
     setOpen(!open);
-    if (!open) {
-      markAllRead();
+    if (!open && unread > 0) {
+      await fetch("/api/notifications", { method: "PATCH" });
       setUnread(0);
-      setNotifications(getNotifications().map((n) => ({ ...n, isRead: true })));
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     }
   };
 
@@ -78,12 +93,16 @@ export function NotificationBell() {
               {notifications.length === 0 ? (
                 <p className="px-3 py-4 text-center text-xs text-text-muted">Нет уведомлений</p>
               ) : (
-                notifications.slice(0, 10).map((n) => (
+                notifications.slice(0, 15).map((n) => (
                   <div
                     key={n.id}
-                    className="flex items-start gap-2 border-b border-border px-3 py-2 last:border-0"
+                    className={`flex items-start gap-2 border-b border-border px-3 py-2 last:border-0 ${
+                      !n.isRead ? "bg-primary/5" : ""
+                    }`}
                   >
-                    <span className="mt-0.5 shrink-0 rounded bg-primary/20 px-1 py-0.5 text-[9px] font-bold text-primary">
+                    <span className={`mt-0.5 shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${
+                      n.type === "device_login" ? "bg-warning/20 text-warning" : "bg-primary/20 text-primary"
+                    }`}>
                       {typeEmoji[n.type] ?? "SYS"}
                     </span>
                     <div className="min-w-0 flex-1">

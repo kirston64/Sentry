@@ -1,29 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckSquare, Filter } from "lucide-react";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { SEED_TASKS, TEAM_MEMBERS } from "@/lib/mock-data";
-import type { Task, TaskPriority } from "@/types/task";
+import type { TaskPriority } from "@/types/task";
+
+interface UserOption { id: string; username: string; fullName: string }
 
 export default function TasksPage() {
-  const [tasks] = useLocalStorage<Task[]>("sentry_tasks", SEED_TASKS);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [taskCounts, setTaskCounts] = useState({ total: 0, active: 0 });
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
 
-  const totalTasks = tasks.length;
-  const activeTasks = tasks.filter((t) => t.status !== "done").length;
+  useEffect(() => {
+    fetch("/api/users").then(r => r.json()).then((data) => {
+      setUsers(data.map((u: { id: string; username: string; fullName: string }) => ({ id: u.id, username: u.username, fullName: u.fullName })));
+    });
+    fetch("/api/tasks").then(r => r.json()).then((tasks) => {
+      setTaskCounts({ total: tasks.length, active: tasks.filter((t: { status: string }) => t.status !== "done").length });
+    });
+  }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <CheckSquare className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold text-text-primary">Tasks</h1>
-        <span className="ml-2 text-xs text-text-muted">{activeTasks} активных / {totalTasks} всего</span>
+        <span className="ml-2 text-xs text-text-muted">{taskCounts.active} активных / {taskCounts.total} всего</span>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />
@@ -47,7 +53,7 @@ export default function TasksPage() {
         >
           <option value="all">Все исполнители</option>
           <option value="unassigned">Не назначен</option>
-          {TEAM_MEMBERS.map((m) => (
+          {users.map((m) => (
             <option key={m.id} value={m.id}>{m.username}</option>
           ))}
         </select>

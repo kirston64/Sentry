@@ -6,8 +6,16 @@ export interface Profile {
   avatar_url: string | null;
   full_name: string | null;
   role: UserRole;
+  bio: string | null;
+  timezone: string | null;
+  discord: string | null;
+  telegram: string | null;
+  github: string | null;
   created_at: string;
   updated_at: string;
+  password_expired: boolean;
+  password_expires_in_days: number;
+  password_changed_at: string;
 }
 
 export interface Project {

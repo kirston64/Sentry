@@ -7,25 +7,229 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String   // bcrypt hash
-  fullName  String
-  role      String   @default("developer") // owner, admin, developer
-  avatar    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============ AUTH & USERS ============
 
-  sessions Session[]
+model User {
+  id                String   @id @default(cuid())
+  username          String   @unique
+  password          String   // bcrypt hash
+  fullName          String
+  role              String   @default("developer") // owner, admin, developer
+  avatar            String?
+  bio               String?
+  timezone          String?
+  discord           String?
+  telegram          String?
+  github            String?
+  passwordChangedAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  sessions         Session[]
+  trustedDevices   TrustedDevice[]
+  deviceLoginCodes DeviceLoginCode[]
+  notifications    Notification[]
+  assignedTasks    Task[]            @relation("TaskAssignee")
+  createdTasks     Task[]            @relation("TaskCreator")
+  assignedIncidents Incident[]       @relation("IncidentAssignee")
+  createdIncidents  Incident[]       @relation("IncidentCreator")
+  deploys          Deploy[]
+  auditLogs        AuditLog[]
+  incidentEvents   IncidentEvent[]
 }
 
 model Session {
   id        String   @id @default(cuid())
   userId    String
   token     String   @unique
+  userAgent String?
+  ip        String?
   expiresAt DateTime
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TrustedDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  fingerprint String   // hash of user-agent + ip range
+  label       String?  // e.g. "Chrome on Windows"
+  lastUsedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprint])
+}
+
+model DeviceLoginCode {
+  id          String   @id @default(cuid())
+  userId      String   // user trying to log in
+  code        String   // 6-digit OTP
+  fingerprint String   // device fingerprint
+  deviceLabel String?
+  status      String   @default("pending") // pending, approved, rejected, expired
+  approvedBy  String?  // admin/owner who approved
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ NOTIFICATIONS ============
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // pr_merged, server_restart, deploy, task_update, member_joined, issue_created, password_expiry, device_login
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ SERVERS ============
+
+model Server {
+  id         String   @id @default(cuid())
+  name       String
+  ip         String
+  port       Int      @default(30120)
+  maxPlayers Int      @default(128)
+  status     String   @default("offline") // online, offline, restarting
+  gameMode   String   @default("Roleplay")
+  mapName    String   @default("Los Santos")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  metrics  ServerMetrics[]
+  deploys  Deploy[]
+  logs     LogEntry[]
+}
+
+model ServerMetrics {
+  id            String   @id @default(cuid())
+  serverId      String
+  playersOnline Int      @default(0)
+  cpuPercent    Float    @default(0)
+  ramPercent    Float    @default(0)
+  uptimeSeconds Int      @default(0)
+  tickRate      Int      @default(64)
+  createdAt     DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// ============ INCIDENTS ============
+
+model Incident {
+  id         String   @id @default(cuid())
+  title      String
+  severity   String   // P1, P2, P3, P4
+  status     String   @default("investigating") // investigating, identified, monitoring, resolved
+  assigneeId String?
+  creatorId  String
+  resolvedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  assignee   User?           @relation("IncidentAssignee", fields: [assigneeId], references: [id])
+  creator    User            @relation("IncidentCreator", fields: [creatorId], references: [id])
+  timeline   IncidentEvent[]
+  postmortem Postmortem?
+  tasks      Task[]
+}
+
+model IncidentEvent {
+  id         String   @id @default(cuid())
+  incidentId String
+  message    String
+  authorId   String
+  createdAt  DateTime @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id])
+}
+
+model Postmortem {
+  id         String   @id @default(cuid())
+  incidentId String   @unique
+  whatBroke   String
+  rootCause  String
+  fix        String
+  prevention String
+  authorId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+// ============ DEPLOYS ============
+
+model Deploy {
+  id          String    @id @default(cuid())
+  version     String
+  environment String    // production, development, staging
+  status      String    @default("pending") // pending, rolling, success, failed
+  serverId    String?
+  triggeredBy String
+  commitSha   String
+  commitMsg   String
+  logs        String    @default("[]") // JSON array of log lines
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  server Server? @relation(fields: [serverId], references: [id])
+  user   User    @relation(fields: [triggeredBy], references: [id])
+}
+
+// ============ TASKS ============
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  assigneeId  String?
+  creatorId   String
+  priority    String   @default("medium") // low, medium, high, critical
+  status      String   @default("todo")   // todo, in_progress, done
+  tags        String   @default("[]")     // JSON array of strings
+  incidentId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User     @relation("TaskCreator", fields: [creatorId], references: [id])
+  incident Incident? @relation(fields: [incidentId], references: [id])
+}
+
+// ============ LOGS ============
+
+model LogEntry {
+  id        String   @id @default(cuid())
+  serverId  String
+  level     String   @default("info") // info, warn, error, debug
+  source    String
+  message   String
+  createdAt DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// ============ AUDIT ============
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  target    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }

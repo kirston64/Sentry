@@ -1,28 +1,42 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Rocket, Filter } from "lucide-react";
 import { DeployCard } from "@/components/deploys/deploy-card";
 import { DeployButton } from "@/components/deploys/deploy-button";
-import { DEPLOYS } from "@/lib/mock-data";
-import type { DeployStatus } from "@/types/deploy";
+import type { Deploy, DeployStatus } from "@/types/deploy";
 
 export default function DeploysPage() {
+  const [deploys, setDeploys] = useState<(Deploy & { triggeredByName?: string })[]>([]);
+  const [loading, setLoading] = useState(true);
   const [envFilter, setEnvFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<DeployStatus | "all">("all");
 
-  const environments = useMemo(() => [...new Set(DEPLOYS.map((d) => d.environment))], []);
+  useEffect(() => {
+    fetch("/api/deploys").then(r => r.json()).then(setDeploys).finally(() => setLoading(false));
+  }, []);
+
+  const environments = useMemo(() => [...new Set(deploys.map((d) => d.environment))], [deploys]);
 
   const filtered = useMemo(() => {
-    return DEPLOYS.filter((d) => {
+    return deploys.filter((d) => {
       if (envFilter !== "all" && d.environment !== envFilter) return false;
       if (statusFilter !== "all" && d.status !== statusFilter) return false;
       return true;
     });
-  }, [envFilter, statusFilter]);
+  }, [deploys, envFilter, statusFilter]);
 
-  const successCount = DEPLOYS.filter((d) => d.status === "success").length;
-  const failCount = DEPLOYS.filter((d) => d.status === "failed").length;
+  const successCount = deploys.filter((d) => d.status === "success").length;
+  const failCount = deploys.filter((d) => d.status === "failed").length;
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-8 w-48 animate-pulse rounded bg-surface" />
+        {[1, 2, 3].map(i => <div key={i} className="h-24 animate-pulse rounded-lg bg-surface" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -37,7 +51,6 @@ export default function DeploysPage() {
         <DeployButton />
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />
@@ -76,7 +89,10 @@ export default function DeploysPage() {
 
       <div className="space-y-2">
         {filtered.map((deploy) => (
-          <DeployCard key={deploy.id} deploy={deploy} />
+          <DeployCard key={deploy.id} deploy={{
+            ...deploy,
+            triggeredBy: deploy.triggeredByName || deploy.triggeredBy,
+          }} />
         ))}
         {filtered.length === 0 && (
           <p className="py-8 text-center text-sm text-text-muted">Нет деплоев с выбранными фильтрами</p>

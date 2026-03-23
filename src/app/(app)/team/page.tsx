@@ -1,25 +1,43 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Users, Filter } from "lucide-react";
 import { MemberCard } from "@/components/team/member-card";
 import { TEAM_MEMBERS } from "@/lib/mock-data";
 import type { UserRole } from "@/types/database";
+import type { TeamMember } from "@/types/team";
 
 export default function TeamPage() {
+  const [members, setMembers] = useState<TeamMember[]>(TEAM_MEMBERS);
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [onlineFilter, setOnlineFilter] = useState<"all" | "online" | "offline">("all");
 
+  // Enrich TEAM_MEMBERS with real user data from API
+  useEffect(() => {
+    fetch("/api/users").then(r => r.json()).then((users) => {
+      const enriched = TEAM_MEMBERS.map(m => {
+        const dbUser = users.find((u: { username: string }) =>
+          u.username.toLowerCase() === m.username.toLowerCase()
+        );
+        if (dbUser) {
+          return { ...m, id: dbUser.id, bio: dbUser.bio || m.bio };
+        }
+        return m;
+      });
+      setMembers(enriched);
+    });
+  }, []);
+
   const filtered = useMemo(() => {
-    return TEAM_MEMBERS.filter((m) => {
+    return members.filter((m) => {
       if (roleFilter !== "all" && m.role !== roleFilter) return false;
       if (onlineFilter === "online" && !m.isOnline) return false;
       if (onlineFilter === "offline" && m.isOnline) return false;
       return true;
     });
-  }, [roleFilter, onlineFilter]);
+  }, [members, roleFilter, onlineFilter]);
 
-  const online = TEAM_MEMBERS.filter((m) => m.isOnline).length;
+  const online = members.filter((m) => m.isOnline).length;
 
   return (
     <div className="space-y-6">
@@ -27,11 +45,10 @@ export default function TeamPage() {
         <Users className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold text-text-primary">Team</h1>
         <span className="ml-2 text-xs text-text-muted">
-          {online} / {TEAM_MEMBERS.length} онлайн
+          {online} / {members.length} онлайн
         </span>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />

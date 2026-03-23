@@ -22,14 +22,11 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { NotificationBell } from "./notification-bell";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { SERVERS, DEPLOYS, SEED_INCIDENTS } from "@/lib/mock-data";
 import { hasRole as hasRoleFn } from "@/lib/rbac";
 import type { Profile } from "@/types/database";
 import type { UserRole } from "@/types/database";
-import type { Incident } from "@/types/incident";
 
 type NavItem = {
   href: string;
@@ -55,7 +52,6 @@ const navItems: NavItem[] = [
 export function Sidebar({ profile }: { profile: Profile }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -73,16 +69,31 @@ export function Sidebar({ profile }: { profile: Profile }) {
     document.documentElement.setAttribute("data-theme", next);
   };
 
-  const alerts = useMemo(() => {
-    const map: Record<string, number> = {};
-    const offline = SERVERS.filter((s) => s.status === "offline").length;
-    const failed = DEPLOYS.filter((d) => d.status === "failed").length;
-    const active = incidents.filter((i) => i.status !== "resolved").length;
-    if (offline) map["/servers"] = offline;
-    if (failed) map["/deploys"] = failed;
-    if (active) map["/incidents"] = active;
-    return map;
-  }, [incidents]);
+  const [alerts, setAlerts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    async function fetchAlerts() {
+      try {
+        const [serversRes, incidentsRes] = await Promise.all([
+          fetch("/api/servers"),
+          fetch("/api/incidents"),
+        ]);
+        const map: Record<string, number> = {};
+        if (serversRes.ok) {
+          const servers = await serversRes.json();
+          const offline = servers.filter((s: { status: string }) => s.status === "offline").length;
+          if (offline) map["/servers"] = offline;
+        }
+        if (incidentsRes.ok) {
+          const incidents = await incidentsRes.json();
+          const active = incidents.filter((i: { status: string }) => i.status !== "resolved").length;
+          if (active) map["/incidents"] = active;
+        }
+        setAlerts(map);
+      } catch { /* ignore */ }
+    }
+    fetchAlerts();
+  }, []);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -161,13 +172,30 @@ export function Sidebar({ profile }: { profile: Profile }) {
         {/* Notification bell */}
         <NotificationBell />
 
+        {/* Password expiry warning */}
+        {profile.password_expires_in_days <= 7 && (
+          <Link
+            href="/profile"
+            className="mx-1 mb-1 flex items-center gap-1.5 rounded-md bg-warning/10 px-2 py-1.5 text-[10px] text-warning transition-colors hover:bg-warning/20"
+          >
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            {profile.password_expires_in_days === 0
+              ? "Пароль истёк!"
+              : `Пароль истекает через ${profile.password_expires_in_days} дн.`
+            }
+          </Link>
+        )}
+
         {/* User */}
-        <div className="mt-1 flex items-center gap-2 px-3 py-1.5 text-xs text-text-muted">
+        <Link
+          href="/profile"
+          className="mt-1 flex items-center gap-2 rounded-md px-3 py-1.5 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+        >
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
             {(profile.github_username ?? "U")[0].toUpperCase()}
           </div>
-          <span className="truncate">{profile.github_username ?? "User"}</span>
-        </div>
+          <span className="truncate">{profile.full_name || profile.github_username || "User"}</span>
+        </Link>
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-error"

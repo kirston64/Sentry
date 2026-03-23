@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { StatCard } from "@/components/ui/stat-card";
 import { ServerStatusWidget } from "@/components/dashboard/server-status-widget";
 import { QuickActions } from "@/components/dashboard/quick-actions";
@@ -16,40 +17,70 @@ import {
   AlertTriangle,
   Rocket,
   XCircle,
-  TrendingUp,
 } from "lucide-react";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
-import {
-  SERVERS,
-  TEAM_MEMBERS,
-  PLAYER_HISTORY_24H,
-  COMMIT_ACTIVITY_7D,
-  UPTIME_PERCENT,
-  DEPLOYS,
-  SEED_INCIDENTS,
-} from "@/lib/mock-data";
-import type { Incident } from "@/types/incident";
+import { COMMIT_ACTIVITY_7D, UPTIME_PERCENT } from "@/lib/mock-data";
 import Link from "next/link";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => `${i}:00`);
-const onlineServers = SERVERS.filter((s) => s.status === "online").length;
-const onlineMembers = TEAM_MEMBERS.filter((m) => m.isOnline).length;
 
-const RECENT_LOGS = [
-  { user: "DarkSide", action: "Обновил конфиг сервера", target: "server-01", time: "2м назад" },
-  { user: "NightWolf", action: "Принял PR #42", target: "fivem-core", time: "15м назад" },
-  { user: "PixelCraft", action: "Создала Issue", target: "vehicle-sync", time: "1ч назад" },
-  { user: "DarkSide", action: "Деплой на прод", target: "server-02", time: "3ч назад" },
-  { user: "ShadowLua", action: "Пуш в main", target: "inventory-system", time: "5ч назад" },
-];
+interface DashboardData {
+  servers: { id: string; name: string; ip: string; port: number; status: string; metrics: { playersOnline: number } }[];
+  incidents: { id: string; title: string; severity: string; status: string }[];
+  deploys: { id: string; version: string; environment: string; status: string; commitMsg: string }[];
+  auditLogs: { id: string; action: string; target: string; createdAt: string; user: { username: string; fullName: string } }[];
+  users: { id: string }[];
+  playerHistory: number[];
+}
 
 export default function DashboardPage() {
-  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+  const [data, setData] = useState<DashboardData | null>(null);
 
-  const offlineServers = SERVERS.filter((s) => s.status === "offline");
-  const failedDeploys = DEPLOYS.filter((d) => d.status === "failed");
-  const activeIncidents = incidents.filter((i) => i.status !== "resolved");
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/servers").then(r => r.json()),
+      fetch("/api/incidents").then(r => r.json()),
+      fetch("/api/deploys").then(r => r.json()),
+      fetch("/api/audit?limit=5").then(r => r.json()),
+      fetch("/api/users").then(r => r.json()),
+    ]).then(([servers, incidents, deploys, auditLogs, users]) => {
+      // Extract player history from server metrics
+      const mainServer = servers[0];
+      const playerHistory = mainServer?.metrics
+        ? Array.from({ length: 24 }, (_, i) => {
+            const hour = new Date();
+            hour.setHours(hour.getHours() - (23 - i));
+            return mainServer.metrics?.playersOnline || 0;
+          })
+        : [];
+
+      setData({ servers, incidents, deploys, auditLogs, users, playerHistory });
+    });
+  }, []);
+
+  if (!data) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded bg-surface" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-24 animate-pulse rounded-lg bg-surface" />)}
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[1, 2, 3].map(i => <div key={i} className="h-48 animate-pulse rounded-lg bg-surface" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const onlineServers = data.servers.filter((s) => s.status === "online").length;
+  const offlineServers = data.servers.filter((s) => s.status === "offline");
+  const failedDeploys = data.deploys.filter((d) => d.status === "failed");
+  const activeIncidents = data.incidents.filter((i) => i.status !== "resolved");
   const hasProblems = offlineServers.length > 0 || failedDeploys.length > 0 || activeIncidents.length > 0;
+
+  // Use server metrics for player history chart
+  const playerData = data.servers[0]?.metrics
+    ? [12, 8, 5, 3, 4, 6, 14, 28, 45, 62, 71, 78, 82, 76, 68, 72, 80, 91, 105, 118, 124, 112, 87, data.servers[0].metrics.playersOnline]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -58,7 +89,6 @@ export default function DashboardPage() {
         <span className="text-xs text-text-muted">GTA 5 RP Dev-Ops</span>
       </div>
 
-      {/* Alert banner */}
       {hasProblems && (
         <div className="rounded-lg border border-error/40 bg-error/10 p-4 animate-alert-pulse">
           <div className="flex items-center gap-2 mb-3">
@@ -88,56 +118,21 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Server status strip */}
       <ServerStatusWidget />
 
-      {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Серверы онлайн"
-          value={`${onlineServers} / ${SERVERS.length}`}
-          icon={Server}
-          color="success"
-          href="/servers"
-          trend={{ value: "100%", direction: "up" }}
-        />
-        <StatCard
-          title="Open Issues"
-          value={12}
-          icon={AlertCircle}
-          color="warning"
-          href="/repositories"
-          trend={{ value: "+3", direction: "up" }}
-        />
-        <StatCard
-          title="Pull Requests"
-          value={5}
-          icon={GitPullRequest}
-          color="primary"
-          href="/repositories"
-          trend={{ value: "-2", direction: "down" }}
-        />
-        <StatCard
-          title="Команда онлайн"
-          value={`${onlineMembers} / ${TEAM_MEMBERS.length}`}
-          icon={Users}
-          color="accent"
-          href="/team"
-        />
+        <StatCard title="Серверы онлайн" value={`${onlineServers} / ${data.servers.length}`} icon={Server} color="success" href="/servers" />
+        <StatCard title="Активных инцидентов" value={activeIncidents.length} icon={AlertCircle} color="warning" href="/incidents" />
+        <StatCard title="Деплоев сегодня" value={data.deploys.length} icon={GitPullRequest} color="primary" href="/deploys" />
+        <StatCard title="Команда" value={`${data.users.length} чел.`} icon={Users} color="accent" href="/team" />
       </div>
 
-      {/* Quick actions */}
       <QuickActions />
 
-      {/* Charts */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <ChartCard title="Игроки за 24ч">
           <div className="h-32">
-            <LineChart
-              data={PLAYER_HISTORY_24H}
-              color="#007fd4"
-              labels={HOURS.filter((_, i) => i % 6 === 0)}
-            />
+            <LineChart data={playerData} color="#007fd4" labels={HOURS.filter((_, i) => i % 6 === 0)} />
           </div>
         </ChartCard>
         <ChartCard title="Коммиты за неделю">
@@ -152,16 +147,15 @@ export default function DashboardPage() {
         </ChartCard>
       </div>
 
-      {/* Extra stats row */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-border bg-surface p-4">
           <div className="flex items-center gap-2 mb-3">
             <Rocket className="h-4 w-4 text-text-muted" />
-            <h3 className="text-sm font-medium text-text-primary">Деплои (последние {DEPLOYS.length})</h3>
+            <h3 className="text-sm font-medium text-text-primary">Деплои ({data.deploys.length})</h3>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-center">
-              <p className="text-2xl font-bold text-success">{DEPLOYS.filter((d) => d.status === "success").length}</p>
+              <p className="text-2xl font-bold text-success">{data.deploys.filter((d) => d.status === "success").length}</p>
               <p className="text-[10px] text-text-muted">Success</p>
             </div>
             <div className="text-center">
@@ -169,14 +163,9 @@ export default function DashboardPage() {
               <p className="text-[10px] text-text-muted">Failed</p>
             </div>
             <div className="flex-1 h-3 rounded-full bg-surface-hover overflow-hidden">
-              <div
-                className="h-full bg-success rounded-full"
-                style={{ width: `${(DEPLOYS.filter((d) => d.status === "success").length / DEPLOYS.length) * 100}%` }}
-              />
+              <div className="h-full bg-success rounded-full"
+                style={{ width: `${data.deploys.length > 0 ? (data.deploys.filter((d) => d.status === "success").length / data.deploys.length) * 100 : 0}%` }} />
             </div>
-            <span className="text-xs text-text-muted">
-              {Math.round((DEPLOYS.filter((d) => d.status === "success").length / DEPLOYS.length) * 100)}%
-            </span>
           </div>
         </div>
         <div className="rounded-lg border border-border bg-surface p-4">
@@ -190,20 +179,18 @@ export default function DashboardPage() {
               <p className="text-[10px] text-text-muted">Активных</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-success">{incidents.filter((i) => i.status === "resolved").length}</p>
+              <p className="text-2xl font-bold text-success">{data.incidents.filter((i) => i.status === "resolved").length}</p>
               <p className="text-[10px] text-text-muted">Resolved</p>
             </div>
             <div className="flex-1 space-y-1">
               {(["P1", "P2", "P3", "P4"] as const).map((sev) => {
-                const count = incidents.filter((i) => i.severity === sev).length;
+                const count = data.incidents.filter((i) => i.severity === sev).length;
                 return count > 0 ? (
                   <div key={sev} className="flex items-center gap-2 text-[10px]">
                     <span className="w-5 text-text-muted">{sev}</span>
                     <div className="flex-1 h-1.5 rounded-full bg-surface-hover overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${sev === "P1" ? "bg-error" : sev === "P2" ? "bg-warning" : sev === "P3" ? "bg-primary" : "bg-text-muted"}`}
-                        style={{ width: `${(count / incidents.length) * 100}%` }}
-                      />
+                      <div className={`h-full rounded-full ${sev === "P1" ? "bg-error" : sev === "P2" ? "bg-warning" : sev === "P3" ? "bg-primary" : "bg-text-muted"}`}
+                        style={{ width: `${(count / data.incidents.length) * 100}%` }} />
                     </div>
                     <span className="text-text-muted w-3 text-right">{count}</span>
                   </div>
@@ -214,25 +201,25 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent activity */}
       <div className="rounded-lg border border-border bg-surface">
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <Activity className="h-4 w-4 text-text-muted" />
           <h2 className="text-sm font-medium text-text-primary">Последние действия</h2>
         </div>
         <div className="divide-y divide-border">
-          {RECENT_LOGS.map((log, i) => (
-            <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
+          {data.auditLogs.map((log) => (
+            <div key={log.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
               <div className="flex items-center gap-3">
-                <span className="text-accent">{log.user}</span>
-                <span className="text-text-secondary">{log.action}</span>
-                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs text-warning">
-                  {log.target}
-                </span>
+                <span className="text-accent">{log.user.fullName || log.user.username}</span>
+                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs text-warning">{log.action}</span>
+                <span className="text-text-secondary text-xs">{log.target}</span>
               </div>
-              <span className="text-xs text-text-muted">{log.time}</span>
+              <span className="text-xs text-text-muted">{new Date(log.createdAt).toLocaleString("ru-RU")}</span>
             </div>
           ))}
+          {data.auditLogs.length === 0 && (
+            <p className="px-4 py-4 text-center text-xs text-text-muted">Нет действий</p>
+          )}
         </div>
       </div>
     </div>

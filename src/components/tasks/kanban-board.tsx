@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { TaskColumn } from "./task-column";
 import { TaskModal } from "./task-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { SEED_TASKS } from "@/lib/mock-data";
-import { addAuditEntry } from "@/lib/audit";
 import type { Task, TaskStatus, TaskPriority } from "@/types/task";
 
 const COLUMNS: TaskStatus[] = ["todo", "in_progress", "done"];
@@ -17,12 +14,16 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ priorityFilter = "all", assigneeFilter = "all" }: KanbanBoardProps) {
-  const [tasks, setTasks] = useLocalStorage<Task[]>("sentry_tasks", SEED_TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>("todo");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const draggedId = useRef<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/tasks").then(r => r.json()).then(setTasks);
+  }, []);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -44,55 +45,66 @@ export function KanbanBoard({ priorityFilter = "all", assigneeFilter = "all" }: 
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent, status: TaskStatus) => {
+    async (e: React.DragEvent, status: TaskStatus) => {
       e.preventDefault();
       const id = draggedId.current;
       if (!id) return;
-      const task = tasks.find((t) => t.id === id);
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === id ? { ...t, status, updatedAt: new Date().toISOString() } : t
-        )
-      );
-      if (task) {
-        addAuditEntry({ user: "You", action: "task.move", target: `${task.title} → ${status}` });
-      }
+
+      setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
+
+      await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+
       draggedId.current = null;
     },
-    [setTasks]
+    []
   );
 
   const handleSave = useCallback(
-    (task: Task) => {
-      setTasks((prev) => {
-        const exists = prev.find((t) => t.id === task.id);
-        if (!exists) {
-          addAuditEntry({ user: "You", action: "task.create", target: task.title, details: task.priority });
+    async (task: Task) => {
+      const exists = tasks.find((t) => t.id === task.id);
+      if (exists) {
+        const res = await fetch(`/api/tasks/${task.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(task),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          setTasks((prev) => prev.map((t) => t.id === task.id ? updated : t));
         }
-        if (exists) return prev.map((t) => (t.id === task.id ? task : t));
-        return [...prev, task];
-      });
+      } else {
+        const res = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(task),
+        });
+        if (res.ok) {
+          const created = await res.json();
+          setTasks((prev) => [...prev, created]);
+        }
+      }
       setModalOpen(false);
       setEditingTask(null);
     },
-    [setTasks]
+    [tasks]
   );
 
   const handleDeleteRequest = useCallback((id: string) => {
     setDeleteConfirm(id);
   }, []);
 
-  const handleDeleteConfirm = useCallback(() => {
+  const handleDeleteConfirm = useCallback(async () => {
     if (!deleteConfirm) return;
-    const task = tasks.find((t) => t.id === deleteConfirm);
+    await fetch(`/api/tasks/${deleteConfirm}`, { method: "DELETE" });
     setTasks((prev) => prev.filter((t) => t.id !== deleteConfirm));
-    if (task) {
-      addAuditEntry({ user: "You", action: "task.delete", target: task.title });
-    }
     setDeleteConfirm(null);
     setModalOpen(false);
     setEditingTask(null);
-  }, [deleteConfirm, tasks, setTasks]);
+  }, [deleteConfirm]);
 
   const handleEdit = useCallback((task: Task) => {
     setEditingTask(task);
