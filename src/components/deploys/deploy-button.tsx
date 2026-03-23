@@ -1,17 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Rocket } from "lucide-react";
+import { Rocket, Lock } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
+import { useProfile } from "@/components/auth/profile-context";
+import { canDeployProd } from "@/lib/rbac";
+import { addAuditEntry } from "@/lib/audit";
 import { clsx } from "clsx";
 
 export function DeployButton() {
   const [deploying, setDeploying] = useState(false);
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
+  const profile = useProfile();
+  const allowed = canDeployProd(profile.role);
 
   const handleDeploy = () => {
-    if (deploying) return;
+    if (deploying || !allowed) return;
     setDeploying(true);
     setProgress(0);
 
@@ -24,11 +29,25 @@ export function DeployButton() {
             setDeploying(false);
             setProgress(0);
             toast("Deploy v2.14.1 завершён успешно!", "success");
+            addAuditEntry({ user: profile.github_username ?? "Unknown", action: "deploy.trigger", target: "v2.14.1 → production" });
           }, 500);
         }
       }, i * 1000);
     });
   };
+
+  if (!allowed) {
+    return (
+      <button
+        disabled
+        className="flex items-center gap-2 rounded-md bg-surface-hover px-4 py-2 text-sm font-medium text-text-muted cursor-not-allowed"
+        title="Деплой доступен только для Owner"
+      >
+        <Lock className="h-4 w-4" />
+        Deploy Now
+      </button>
+    );
+  }
 
   return (
     <div className="relative">

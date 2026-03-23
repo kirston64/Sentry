@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import { useInterval } from "@/hooks/useInterval";
 import { ServerStatusDot } from "./server-status-dot";
 import { GaugeBar } from "./gauge-bar";
@@ -57,7 +58,7 @@ export function ServerCard({ server, baseMetrics }: ServerCardProps) {
   useInterval(tick, isOnline ? 3000 : null);
 
   return (
-    <div className="rounded-lg border border-border bg-surface overflow-hidden transition-transform hover:scale-[1.02]">
+    <Link href={`/servers/${server.id}`} className="block rounded-lg border border-border bg-surface overflow-hidden transition-transform hover:scale-[1.02]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2.5">
@@ -109,6 +110,6 @@ export function ServerCard({ server, baseMetrics }: ServerCardProps) {
           Сервер офлайн
         </div>
       )}
-    </div>
+    </Link>
   );
 }

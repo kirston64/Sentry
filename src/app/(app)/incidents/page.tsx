@@ -1,23 +1,27 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Plus } from "lucide-react";
+import { useState, useMemo } from "react";
+import { AlertTriangle, Plus, Filter } from "lucide-react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { IncidentCard } from "@/components/incidents/incident-card";
 import { CreateIncidentModal } from "@/components/incidents/create-incident-modal";
 import { SEED_INCIDENTS } from "@/lib/mock-data";
-import type { Incident } from "@/types/incident";
+import type { Incident, Severity } from "@/types/incident";
 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
   const [modalOpen, setModalOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "active" | "resolved">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "resolved">("all");
+  const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
 
-  const filtered = incidents.filter((inc) => {
-    if (filter === "active") return inc.status !== "resolved";
-    if (filter === "resolved") return inc.status === "resolved";
-    return true;
-  });
+  const filtered = useMemo(() => {
+    return incidents.filter((inc) => {
+      if (statusFilter === "active" && inc.status === "resolved") return false;
+      if (statusFilter === "resolved" && inc.status !== "resolved") return false;
+      if (severityFilter !== "all" && inc.severity !== severityFilter) return false;
+      return true;
+    });
+  }, [incidents, statusFilter, severityFilter]);
 
   const handleCreate = (incident: Incident) => {
     setIncidents((prev) => [incident, ...prev]);
@@ -44,18 +48,42 @@ export default function IncidentsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-1">
-        {(["all", "active", "resolved"] as const).map((f) => (
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
+          <Filter className="h-3 w-3" />
+        </div>
+        <div className="flex gap-1">
+          {(["all", "active", "resolved"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
+                statusFilter === f ? "bg-surface-hover text-text-primary" : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {f === "all" ? "Все" : f === "active" ? "Активные" : "Resolved"}
+            </button>
+          ))}
+        </div>
+        <select
+          value={severityFilter}
+          onChange={(e) => setSeverityFilter(e.target.value as Severity | "all")}
+          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+        >
+          <option value="all">Все severity</option>
+          <option value="P1">P1 Critical</option>
+          <option value="P2">P2 High</option>
+          <option value="P3">P3 Medium</option>
+          <option value="P4">P4 Low</option>
+        </select>
+        {(statusFilter !== "all" || severityFilter !== "all") && (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-              filter === f ? "bg-surface-hover text-text-primary" : "text-text-muted hover:text-text-secondary"
-            }`}
+            onClick={() => { setStatusFilter("all"); setSeverityFilter("all"); }}
+            className="text-[10px] text-primary hover:underline"
           >
-            {f === "all" ? "Все" : f === "active" ? "Активные" : "Resolved"}
+            Сбросить
           </button>
-        ))}
+        )}
       </div>
 
       <div className="space-y-2">

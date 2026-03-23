@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { clsx } from "clsx";
-import { GitCommit, CheckSquare, GitPullRequest } from "lucide-react";
+import { GitCommit, CheckSquare, GitPullRequest, MessageCircle, Send } from "lucide-react";
 import type { TeamMember } from "@/types/team";
 
 const roleColors = {
@@ -67,16 +69,33 @@ export function MemberCard({ member }: { member: TeamMember }) {
         ))}
       </div>
 
-      {/* Stats */}
-      <div className="mt-3 flex items-center gap-4 text-[10px] text-text-muted">
-        <span className="flex items-center gap-1">
+      {/* Contact + Stats */}
+      <div className="mt-3 flex items-center gap-2 text-[10px] text-text-muted">
+        <a
+          href={`https://t.me/${member.telegram.replace("@", "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-1 rounded bg-[#229ED9]/10 px-1.5 py-0.5 text-[#229ED9] hover:bg-[#229ED9]/20 transition-colors"
+          title={member.telegram}
+        >
+          <Send className="h-3 w-3" /> TG
+        </a>
+        <a
+          href={`https://discord.com/users/${member.discord.split("#")[0]}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-1 rounded bg-[#5865F2]/10 px-1.5 py-0.5 text-[#5865F2] hover:bg-[#5865F2]/20 transition-colors"
+          title={member.discord}
+        >
+          <MessageCircle className="h-3 w-3" /> DS
+        </a>
+        <span className="flex items-center gap-1 ml-1">
           <GitCommit className="h-3 w-3" /> {member.stats.commits}
         </span>
         <span className="flex items-center gap-1">
           <CheckSquare className="h-3 w-3" /> {member.stats.tasksCompleted}
-        </span>
-        <span className="flex items-center gap-1">
-          <GitPullRequest className="h-3 w-3" /> {member.stats.prsReviewed}
         </span>
         <span className="ml-auto">
           {member.isOnline ? "онлайн" : timeAgo(member.lastActiveAt)}

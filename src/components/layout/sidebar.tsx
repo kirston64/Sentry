@@ -18,11 +18,27 @@ import {
   Shield,
   LogOut,
   Command,
+  Lock,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
 import { NotificationBell } from "./notification-bell";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { SERVERS, DEPLOYS, SEED_INCIDENTS } from "@/lib/mock-data";
+import { hasRole as hasRoleFn } from "@/lib/rbac";
 import type { Profile } from "@/types/database";
+import type { UserRole } from "@/types/database";
+import type { Incident } from "@/types/incident";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  minRole?: UserRole;
+};
+
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/servers", label: "Servers", icon: Server },
   { href: "/repositories", label: "Repositories", icon: GitBranch },
@@ -31,14 +47,42 @@ const navItems = [
   { href: "/deploys", label: "Deploys", icon: Rocket },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
   { href: "/logs", label: "Logs", icon: ScrollText },
-  { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/activity", label: "Activity", icon: Activity, minRole: "admin" },
   { href: "/console", label: "Console", icon: TerminalSquare },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings", label: "Settings", icon: Settings, minRole: "admin" },
 ];
 
 export function Sidebar({ profile }: { profile: Profile }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("sentry_theme") as "dark" | "light" | null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("sentry_theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+  };
+
+  const alerts = useMemo(() => {
+    const map: Record<string, number> = {};
+    const offline = SERVERS.filter((s) => s.status === "offline").length;
+    const failed = DEPLOYS.filter((d) => d.status === "failed").length;
+    const active = incidents.filter((i) => i.status !== "resolved").length;
+    if (offline) map["/servers"] = offline;
+    if (failed) map["/deploys"] = failed;
+    if (active) map["/incidents"] = active;
+    return map;
+  }, [incidents]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -57,21 +101,45 @@ export function Sidebar({ profile }: { profile: Profile }) {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        {navItems.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={clsx(
-              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-              pathname === href || (href !== "/dashboard" && pathname.startsWith(href))
-                ? "bg-surface-hover text-text-primary"
-                : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </Link>
-        ))}
+        {navItems.map(({ href, label, icon: Icon, minRole }) => {
+          const locked = minRole && !hasRoleFn(profile.role, minRole);
+          const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+
+          if (locked) {
+            return (
+              <div
+                key={href}
+                className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-muted/40 cursor-not-allowed"
+                title={`Требуется роль: ${minRole}`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+                <Lock className="ml-auto h-3 w-3" />
+              </div>
+            );
+          }
+
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={clsx(
+                "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+                isActive
+                  ? "bg-surface-hover text-text-primary"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+              {alerts[href] && (
+                <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold text-white animate-alert-pulse pointer-events-none">
+                  {alerts[href]}
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="border-t border-border px-2 py-2">
@@ -80,6 +148,15 @@ export function Sidebar({ profile }: { profile: Profile }) {
           <Command className="h-3 w-3" />
           <span>Ctrl+K — поиск</span>
         </div>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="flex w-full items-center gap-2.5 rounded-md px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <span className="text-xs">{theme === "dark" ? "Светлая тема" : "Тёмная тема"}</span>
+        </button>
 
         {/* Notification bell */}
         <NotificationBell />

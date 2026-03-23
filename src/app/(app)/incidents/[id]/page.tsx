@@ -1,13 +1,15 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { ArrowLeft, AlertTriangle, Clock, User } from "lucide-react";
+import { AlertTriangle, FileText, Save, Edit3 } from "lucide-react";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { IncidentTimeline } from "@/components/incidents/incident-timeline";
 import { SEED_INCIDENTS, TEAM_MEMBERS } from "@/lib/mock-data";
-import type { Incident } from "@/types/incident";
+import { useProfile } from "@/components/auth/profile-context";
+import type { Incident, Postmortem } from "@/types/incident";
 
 const severityConfig = {
   P1: { color: "bg-error/20 text-error border-error/30", label: "P1 Critical" },
@@ -25,8 +27,14 @@ const statusConfig = {
 
 export default function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+  const profile = useProfile();
+  const [incidents, setIncidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
   const incident = incidents.find((i) => i.id === id);
+  const [editingPostmortem, setEditingPostmortem] = useState(false);
+  const [pmForm, setPmForm] = useState<Postmortem>({
+    whatBroke: "", rootCause: "", fix: "", prevention: "",
+    author: profile.github_username ?? "Unknown", writtenAt: new Date().toISOString(),
+  });
 
   if (!incident) {
     return (
@@ -48,10 +56,11 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="space-y-6">
-      <Link href="/incidents" className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-primary">
-        <ArrowLeft className="h-4 w-4" />
-        Назад к инцидентам
-      </Link>
+      <Breadcrumbs items={[
+        { label: "Dashboard", href: "/dashboard" },
+        { label: "Incidents", href: "/incidents" },
+        { label: incident.title },
+      ]} />
 
       {/* Header */}
       <div className="rounded-lg border border-border bg-surface p-5">
@@ -99,6 +108,99 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       <div className="rounded-lg border border-border bg-surface p-5">
         <h2 className="mb-4 text-sm font-medium text-text-primary">Таймлайн расследования</h2>
         <IncidentTimeline events={incident.timeline} />
+      </div>
+
+      {/* Postmortem */}
+      <div className="rounded-lg border border-border bg-surface p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-text-muted" />
+            <h2 className="text-sm font-medium text-text-primary">Postmortem</h2>
+          </div>
+          {incident.postmortem && !editingPostmortem && (
+            <button
+              onClick={() => {
+                setPmForm(incident.postmortem!);
+                setEditingPostmortem(true);
+              }}
+              className="flex items-center gap-1 text-[10px] text-primary hover:underline"
+            >
+              <Edit3 className="h-3 w-3" /> Редактировать
+            </button>
+          )}
+        </div>
+
+        {incident.postmortem && !editingPostmortem ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-[10px] font-medium text-error mb-1">Что сломалось</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{incident.postmortem.whatBroke}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-warning mb-1">Корневая причина</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{incident.postmortem.rootCause}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-success mb-1">Как починили</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{incident.postmortem.fix}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-primary mb-1">Предотвращение</p>
+              <p className="text-xs text-text-secondary leading-relaxed">{incident.postmortem.prevention}</p>
+            </div>
+            <div className="flex items-center gap-2 pt-2 border-t border-border text-[10px] text-text-muted">
+              <span>Автор: <span className="text-accent">{incident.postmortem.author}</span></span>
+              <span>{new Date(incident.postmortem.writtenAt).toLocaleString("ru-RU")}</span>
+            </div>
+          </div>
+        ) : editingPostmortem || !incident.postmortem ? (
+          <div className="space-y-3">
+            {[
+              { key: "whatBroke" as const, label: "Что сломалось", placeholder: "Опишите что именно перестало работать..." },
+              { key: "rootCause" as const, label: "Корневая причина", placeholder: "Почему это произошло..." },
+              { key: "fix" as const, label: "Как починили", placeholder: "Что было сделано для исправления..." },
+              { key: "prevention" as const, label: "Предотвращение", placeholder: "Что сделать чтобы не повторилось..." },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key}>
+                <label className="text-[10px] font-medium text-text-muted mb-1 block">{label}</label>
+                <textarea
+                  value={pmForm[key]}
+                  onChange={(e) => setPmForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  rows={2}
+                  className="w-full rounded border border-border bg-bg px-3 py-2 text-xs text-text-primary placeholder:text-text-muted/50 focus:border-primary focus:outline-none resize-none"
+                />
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const postmortem: Postmortem = {
+                    ...pmForm,
+                    author: profile.github_username ?? "Unknown",
+                    writtenAt: new Date().toISOString(),
+                  };
+                  setIncidents((prev) =>
+                    prev.map((i) => (i.id === incident.id ? { ...i, postmortem } : i))
+                  );
+                  setEditingPostmortem(false);
+                }}
+                disabled={!pmForm.whatBroke || !pmForm.rootCause || !pmForm.fix || !pmForm.prevention}
+                className="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/80 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Save className="h-3 w-3" /> Сохранить
+              </button>
+              {editingPostmortem && (
+                <button
+                  onClick={() => setEditingPostmortem(false)}
+                  className="rounded px-3 py-1.5 text-xs text-text-muted hover:text-text-primary"
+                >
+                  Отмена
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

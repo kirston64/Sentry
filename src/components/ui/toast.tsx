@@ -21,7 +21,7 @@ export function Toast({ item, onDismiss }: ToastProps) {
   return (
     <div
       className={clsx(
-        "flex items-center gap-3 rounded-lg border-l-4 bg-surface px-4 py-3 shadow-lg animate-slide-in",
+        "flex items-center gap-3 rounded-lg border-l-4 bg-surface px-4 py-3 shadow-lg animate-slide-in-right",
         color
       )}
     >

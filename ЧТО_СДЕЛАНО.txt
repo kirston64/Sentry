@@ -1,0 +1,435 @@
+================================================================================
+                    SENTRY RP DEV-OPS DASHBOARD — ЧТО СДЕЛАНО
+================================================================================
+
+Проект: Веб-приложение для команды разработки GTA 5 RP сервера.
+Стек: Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS.
+Авторизация: cookie-based dev login (owner / admin / developer).
+Данные: mock-данные + localStorage для персистентности.
+
+================================================================================
+                              WAVE 1 — ОСНОВА
+================================================================================
+
+--- PHASE 1: ФУНДАМЕНТ ---
+
+Создана вся инфраструктура проекта:
+- Типы данных: server, team, task, notification, console, database, deploy,
+  incident, log-entry.
+- Хуки: useLocalStorage (персистентное состояние), useInterval (таймеры),
+  useKeyboardShortcut (горячие клавиши).
+- Утилиты: mock-data.ts (единый источник данных), storage.ts (SSR-safe
+  обёртка localStorage), notifications.ts (стор уведомлений), auth.ts
+  (cookie авторизация), rbac.ts (система ролей).
+- Конфиг Tailwind: тёмная тема в стиле VS Code (фон #1e1e1e, поверхность
+  #252526, акценты синий/зелёный/жёлтый/красный), шрифт JetBrains Mono.
+
+--- PHASE 2: SVG ГРАФИКИ ---
+
+Три типа чартов без внешних библиотек, чистый SVG:
+- LineChart — polyline с градиентной заливкой (тренд игроков за 24ч).
+- BarChart — столбчатая диаграмма (коммиты за неделю).
+- RingChart — кольцевая диаграмма через dasharray (uptime %).
+- ChartCard — обёртка-карточка с заголовком.
+
+--- PHASE 3: МОНИТОРИНГ СЕРВЕРОВ (/servers) ---
+
+Страница с карточками серверов (3 штуки):
+- Sentry RP #1 (128 слотов, онлайн)
+- Sentry RP #2 Dev (32 слота, онлайн)
+- Sentry RP #3 Event (64 слота, ОФЛАЙН)
+
+Каждая карточка показывает:
+- Статус (пульсирующая точка), IP, режим игры.
+- Количество игроков / макс.
+- CPU и RAM gauge-бары с цветовыми порогами (зелёный <60%, жёлтый <85%,
+  красный >=85%).
+- Мини-спарклайн (SVG) — график игроков за последние 60 секунд.
+- Tick Rate, время аптайма, название карты.
+
+Реалтайм: метрики jitter-ят каждые 3 секунды через useInterval — CPU, RAM,
+игроки, tick rate случайно колеблются, создавая эффект живого мониторинга.
+
+--- PHASE 4: DASHBOARD ---
+
+Полная переработка главной страницы:
+- ServerStatusWidget — компактная полоска статуса всех серверов.
+- 4 StatCard: серверы онлайн, open issues, PR, команда онлайн.
+  Каждая кликабельна (ведёт на страницу), показывает тренд (стрелка вверх/вниз).
+- QuickActions — кнопки Deploy, Restart, Create Task, View Logs
+  (заблокированы по RBAC для developer).
+- Сетка из 3 графиков: игроки за 24ч, коммиты за неделю, uptime.
+- Лента последних действий (5 записей).
+- КРАСНАЯ ПУЛЬСИРУЮЩАЯ ПЛАШКА "Обнаружены проблемы" — показывает офлайн
+  серверы, упавшие деплои, активные инциденты. Каждая строка кликабельна.
+
+--- PHASE 5: КОМАНДА (/team и /team/[id]) ---
+
+Страница команды — сетка из 7 карточек участников:
+- Аватар (инициалы), роль (цветной badge), статус онлайн.
+- Специализации (теги), статистика (коммиты, задачи, PR reviews).
+- Hover-эффект: подъём + тень.
+
+Детальный профиль каждого участника (кликнуть на карточку):
+- Большой аватар, ФИО, роль, bio-описание.
+- Контакты: Discord, Telegram, GitHub, часовой пояс.
+- 6 метрик: дни в команде, часы/неделю, коммиты, PR reviews,
+  активные задачи, активные инциденты.
+- КРАСНАЯ ПЛАШКА если на человеке висит нерешённый инцидент.
+- Назначенные задачи — все из канбана со статусом и приоритетом.
+- История деплоев — все деплои этого человека (OK/FAIL, версия, окружение).
+- История инцидентов — все инциденты где он ответственный.
+- Навыки — прогресс-бары (зелёный 90+%, синий 70+%, жёлтый 50+%).
+- Специализации + текущий проект.
+
+7 участников с детальными данными:
+  DarkSide (owner) — архитектура, DevOps, Lua
+  NightWolf (admin) — vehicle sync, античит, C#
+  PixelCraft (developer) — UI/UX, React, NUI
+  CodeViper (developer) — database, SQL, оптимизация
+  ShadowLua (developer) — Lua, game logic, NPC AI
+  NetRunner (admin) — networking, security, Linux
+  MapMaker (developer) — map design, 3D modeling, Blender
+
+--- PHASE 6: УВЕДОМЛЕНИЯ ---
+
+- Toast-система: всплывающие уведомления (bottom-right), автоудаление через 4с.
+  Типы: success (зелёный), error (красный), info (синий).
+  Анимация slide-in.
+- ToastProvider — React Context + useToast() хук.
+- NotificationBell — колокольчик в сайдбаре с красным badge (счётчик
+  непрочитанных). Клик открывает дропдаун со списком уведомлений,
+  автоматически помечает все прочитанными.
+- 6 seed-уведомлений при первом запуске.
+
+--- PHASE 7: КАНБАН ДОСКА (/tasks) ---
+
+Полноценная канбан-доска с тремя колонками:
+- To Do / In Progress / Done.
+- HTML5 Drag & Drop (без библиотек) — перетаскивание задач между колонками.
+- Каждая задача: заголовок, приоритет (low/medium/high/critical), теги,
+  назначенный исполнитель.
+- Модалка создания/редактирования: заголовок, описание, назначение,
+  приоритет, теги.
+- Данные сохраняются в localStorage — переживают перезагрузку страницы.
+- 10 seed-задач (реалистичные RP dev задачи).
+- Hover: масштабирование карточки, при перетаскивании — opacity + scale.
+
+--- PHASE 8: ТЕРМИНАЛ (/console) ---
+
+Эмулятор консоли сервера:
+- Табы серверов (онлайн серверы кликабельны, офлайн — задизейблены).
+- UI терминала: чёрный фон, зелёный промпт, мигающий курсор.
+- История команд (стрелка вверх), автоскролл.
+- Команды: help, status, players, restart (с анимацией задержки),
+  kick, say, resources, clear, uptime, weather.
+- Вывод стилизован: промпт зелёный, ошибки красные, инфо серый.
+
+--- PHASE 9: COMMAND PALETTE (Ctrl+K) ---
+
+Модальное окно быстрого поиска:
+- Ctrl+K (или Cmd+K) открывает/закрывает.
+- Поиск по всем страницам и действиям.
+- Две секции: Navigation (все 11 страниц), Actions (Deploy, Restart, Create Task).
+- Навигация стрелками, Enter для выбора, Escape для закрытия.
+- Подсветка активного пункта.
+
+
+================================================================================
+                           WAVE 2 — НОВЫЕ ФИЧИ
+================================================================================
+
+--- PHASE 10: DEPLOY PIPELINE (/deploys) ---
+
+Страница истории деплоев:
+- 8 mock-деплоев с разными статусами (success, failed, rolling, pending).
+- DeployCard — раскрываемая карточка: статус (цветная точка), версия,
+  окружение (production/staging/development), автор, время, SHA коммита,
+  сообщение коммита, раскрываемые логи.
+- DeployButton — кнопка "Deploy Now" с анимированным прогресс-баром
+  (5 секунд, имитация деплоя), генерирует toast при завершении.
+  ЗАБЛОКИРОВАНА для developer и admin (только owner).
+- Счётчик failed деплоев в хедере.
+
+--- PHASE 11: INCIDENT TRACKER (/incidents и /incidents/[id]) ---
+
+Система отслеживания инцидентов:
+- Список инцидентов с фильтрами (Все / Активные / Resolved).
+- Кнопка "Report Incident" — модалка создания.
+- Severity: P1 Critical (красный), P2 High (оранжевый), P3 Medium (синий),
+  P4 Low (серый).
+- Status: investigating, identified, monitoring, resolved.
+
+Детальная страница инцидента:
+- Header с severity badge, статус, заголовок.
+- Информация: дата создания, длительность, ответственный, дата решения.
+- Таймлайн расследования — вертикальная линия с цветными точками,
+  каждое событие с временем, автором и описанием.
+
+Модалка создания:
+- Поля: название, severity, ответственный (выбор из команды), описание.
+- P1/P2 ЗАБЛОКИРОВАНЫ для developer (замок в селекте).
+- Сохраняется в localStorage.
+- 5 seed-инцидентов.
+
+--- PHASE 12: LIVE LOGS VIEWER (/logs) ---
+
+Стриминг логов в реальном времени:
+- Генерация новых логов каждые 1.2 секунды.
+- Уровни: info (синий), warn (жёлтый), error (красный), debug (серый).
+- 8 источников: fivem-core, ox_inventory, esx_identity, pma-voice,
+  sentry_anticheat, sentry_admin, mysql-async, server.
+- Шаблоны логов с подстановкой: имена игроков, ресурсы, метрики, ошибки.
+
+LogViewer — скроллируемый вьюер:
+- Автоскролл к низу (отключается при ручном скролле вверх).
+- Кнопки Pause/Resume и Clear.
+- Счётчик строк + индикатор PAUSED.
+
+LogFilters — панель фильтров:
+- Тоглы по уровням (info/warn/error/debug) — цветные кнопки.
+- Фильтр по источнику (select).
+- Поиск по тексту.
+
+LogLine — одна строка лога:
+- Timestamp, level badge, source, message.
+- Подсветка: числа жёлтым, JSON-фрагменты акцентным цветом.
+- Максимум 500 строк в буфере.
+
+--- PHASE 13: PUBLIC STATUS PAGE (/status) ---
+
+Публичная страница статуса (БЕЗ авторизации):
+- Доступна по /status, не требует логина.
+- Middleware обновлён для bypass этого роута.
+- Отдельный дизайн: тёмный фон #0a0a0a, без сайдбара.
+
+StatusHeader:
+- "All Systems Operational" (зелёный) или "Partial System Outage" (красный).
+- Большой светящийся индикатор, мигает при проблемах.
+
+8 сервисов с 90-дневными uptime барами:
+- Sentry RP #1, #2, #3 (game servers)
+- API Gateway, Database Cluster, Voice Server
+- Anti-Cheat Service, Discord Bot
+
+Каждый сервис:
+- StatusRow: имя, текущий статус (Operational / Degraded / Down).
+- UptimeBar: SVG бар из 90 сегментов (зелёный = up, красный = down).
+- Процент uptime рассчитывается автоматически.
+
+--- PHASE 14: АНИМАЦИИ И СКЕЛЕТОНЫ ---
+
+Новые CSS анимации:
+- shimmer — мерцание для skeleton loading.
+- scale-in — плавное появление.
+- alert-pulse — пульсация красных алертов (opacity + glow).
+
+Компоненты:
+- Skeleton — shimmer-placeholder для загрузки.
+- SkeletonCard — карточка-заглушка.
+- AnimatedCounter — число плавно анимируется от 0 до значения (ease-out cubic,
+  800ms). Используется в StatCard на Dashboard.
+
+Hover-эффекты:
+- ServerCard: scale 1.02 при наведении.
+- TaskCard: scale 1.01 при наведении, scale 0.98 при клике.
+- MemberCard: подъём -0.5 + тень при наведении.
+
+--- PHASE 15: ОБНОВЛЕНИЕ НАВИГАЦИИ ---
+
+Сайдбар обновлён — 11 пунктов:
+  Dashboard, Servers, Repositories, Team, Tasks,
+  Deploys, Incidents, Logs, Activity, Console, Settings.
+
+Command Palette обновлён — все 11 страниц + 3 действия.
+
+
+================================================================================
+                    КРАСНЫЕ АЛЕРТЫ (ALERT СИСТЕМА)
+================================================================================
+
+Пульсирующие красные badge на вкладках сайдбара:
+- Servers — количество офлайн серверов (сейчас: 1).
+- Deploys — количество упавших деплоев (сейчас: 1).
+- Incidents — количество активных инцидентов (сейчас: 1).
+- Анимация alert-pulse: бесконечная пульсация + красное свечение.
+- Incidents обновляются реактивно через useLocalStorage.
+
+Красная плашка на Dashboard:
+- "Обнаружены проблемы" — пульсирующий баннер.
+- Перечисление: офлайн серверы, упавшие деплои, активные инциденты.
+- Каждая строка кликабельна (ведёт на нужную страницу/инцидент).
+
+Красная плашка в профиле участника:
+- Если на человеке висит нерешённый инцидент — красная пульсирующая
+  плашка с деталями.
+
+
+================================================================================
+                    СИСТЕМА УРОВНЕЙ ДОПУСКА (RBAC)
+================================================================================
+
+Три роли: Developer (0) < Admin (1) < Owner (2).
+
+Файл rbac.ts — все функции проверки прав:
+  hasRole, canViewSettings, canViewActivity, canDeployProd, canDeployDev,
+  canRestartServer, canCreateIncident, canUseConsole, canManageUsers.
+
+ProfileContext — React Context для доступа к профилю пользователя из любого
+клиентского компонента (useProfile хук).
+
+AccessDenied — компонент для заблокированных страниц (замок, текст, ссылка
+на Dashboard).
+
+МАТРИЦА ДОСТУПА:
+
+  Действие                      | Developer | Admin | Owner
+  ------------------------------|-----------|-------|------
+  Просмотр Dashboard            |    да     |  да   |  да
+  Просмотр Servers              |    да     |  да   |  да
+  Просмотр Repositories         |    да     |  да   |  да
+  Просмотр Team                 |    да     |  да   |  да
+  Просмотр Tasks                |    да     |  да   |  да
+  Просмотр Deploys              |    да     |  да   |  да
+  Просмотр Incidents            |    да     |  да   |  да
+  Просмотр Logs                 |    да     |  да   |  да
+  Просмотр Activity / Audit Log |   НЕТ     |  да   |  да
+  Просмотр Settings             |   НЕТ     |  да   |  да
+  Deploy Now (production)       |   НЕТ     |  НЕТ  |  да
+  Deploy to Dev                 |   НЕТ     |  да   |  да
+  Restart Server                |   НЕТ     |  да   |  да
+  Console (prod серверы)        |   НЕТ     |  да   |  да
+  Console (dev серверы)         |    да     |  да   |  да
+  Создать инцидент P1/P2        |   НЕТ     |  да   |  да
+  Создать инцидент P3/P4        |    да     |  да   |  да
+  Quick Actions: Deploy/Restart |   НЕТ     |  да   |  да
+  Управление ролями             |   НЕТ     |  НЕТ  |  да
+
+Как выглядят ограничения в UI:
+- Сайдбар: заблокированные пункты серые + иконка замка, не кликабельны.
+- Страницы: экран AccessDenied с замком, описанием и ссылкой на Dashboard.
+- Кнопки: серые с замком + tooltip с объяснением.
+- Console: прод-серверы залочены, показывается экран "нет доступа".
+- Инциденты: P1/P2 задизейблены в выпадающем списке с замком.
+
+
+================================================================================
+                         СТРУКТУРА ФАЙЛОВ
+================================================================================
+
+src/
+├── app/
+│   ├── (app)/                        # Авторизованная зона
+│   │   ├── layout.tsx                # Sidebar + CommandPalette + ProfileProvider
+│   │   ├── dashboard/page.tsx        # Главная + алерты + статистика + графики
+│   │   ├── servers/page.tsx          # Мониторинг серверов
+│   │   ├── repositories/page.tsx     # Репозитории
+│   │   ├── team/page.tsx             # Список команды
+│   │   ├── team/[id]/page.tsx        # Детальный профиль участника
+│   │   ├── tasks/page.tsx            # Канбан доска
+│   │   ├── deploys/page.tsx          # Deploy Pipeline
+│   │   ├── incidents/page.tsx        # Список инцидентов
+│   │   ├── incidents/[id]/page.tsx   # Детали инцидента
+│   │   ├── logs/page.tsx             # Live Logs Viewer
+│   │   ├── activity/page.tsx         # Audit Log (admin+)
+│   │   ├── console/page.tsx          # Терминал
+│   │   └── settings/page.tsx         # Настройки (admin+)
+│   ├── status/page.tsx               # Публичная страница статуса
+│   ├── api/auth/login/route.ts       # POST логин
+│   ├── api/auth/logout/route.ts      # POST логаут
+│   ├── page.tsx                      # Страница логина
+│   ├── layout.tsx                    # Root layout + ToastProvider
+│   └── globals.css                   # Стили + анимации
+├── components/
+│   ├── auth/
+│   │   ├── profile-context.tsx       # React Context для профиля
+│   │   └── access-denied.tsx         # Компонент "Нет доступа"
+│   ├── charts/
+│   │   ├── line-chart.tsx
+│   │   ├── bar-chart.tsx
+│   │   ├── ring-chart.tsx
+│   │   └── chart-card.tsx
+│   ├── console/
+│   │   ├── terminal.tsx
+│   │   └── command-handler.ts
+│   ├── dashboard/
+│   │   ├── quick-actions.tsx         # + RBAC
+│   │   ├── server-status-widget.tsx
+│   │   └── recent-logs.tsx
+│   ├── deploys/
+│   │   ├── deploy-button.tsx         # + RBAC
+│   │   └── deploy-card.tsx
+│   ├── incidents/
+│   │   ├── create-incident-modal.tsx # + RBAC (P1/P2 lock)
+│   │   ├── incident-card.tsx
+│   │   └── incident-timeline.tsx
+│   ├── layout/
+│   │   ├── sidebar.tsx               # + алерты + RBAC замки
+│   │   └── notification-bell.tsx
+│   ├── logs/
+│   │   ├── log-viewer.tsx
+│   │   ├── log-filters.tsx
+│   │   └── log-line.tsx
+│   ├── servers/
+│   │   ├── server-card.tsx
+│   │   ├── gauge-bar.tsx
+│   │   ├── player-chart.tsx
+│   │   └── server-status-dot.tsx
+│   ├── status/
+│   │   ├── status-header.tsx
+│   │   ├── status-row.tsx
+│   │   └── uptime-bar.tsx
+│   ├── tasks/
+│   │   ├── kanban-board.tsx
+│   │   ├── task-card.tsx
+│   │   ├── task-column.tsx
+│   │   └── task-modal.tsx
+│   ├── team/
+│   │   └── member-card.tsx
+│   └── ui/
+│       ├── animated-counter.tsx
+│       ├── command-palette.tsx
+│       ├── login-form.tsx
+│       ├── skeleton.tsx
+│       ├── stat-card.tsx
+│       ├── toast-provider.tsx
+│       └── toast.tsx
+├── hooks/
+│   ├── useInterval.ts
+│   ├── useKeyboardShortcut.ts
+│   └── useLocalStorage.ts
+├── lib/
+│   ├── auth.ts
+│   ├── mock-data.ts
+│   ├── notifications.ts
+│   ├── rbac.ts
+│   └── storage.ts
+├── types/
+│   ├── console.ts
+│   ├── database.ts
+│   ├── deploy.ts
+│   ├── incident.ts
+│   ├── log-entry.ts
+│   ├── notification.ts
+│   ├── server.ts
+│   ├── task.ts
+│   └── team.ts
+└── middleware.ts
+
+Итого: ~95 файлов, ~13000 строк кода.
+
+
+================================================================================
+                         КАК ЗАПУСТИТЬ
+================================================================================
+
+cd /Users/kirillnazolkin/Sentry
+npm install
+npx next dev --port 3001
+
+Открыть http://localhost:3001
+Ввести любой username, выбрать роль (owner/admin/developer), нажать "Войти".
+
+Публичный статус: http://localhost:3001/status (без авторизации).
+
+GitHub: git@github.com:kirston64/Sentry.git

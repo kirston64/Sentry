@@ -11,4 +11,5 @@ export interface Task {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  incidentId?: string;
 }

@@ -1,52 +1,38 @@
 import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
+import { prisma } from "@/lib/db";
 import type { Profile } from "@/types/database";
+import type { UserRole } from "@/types/database";
 
 const COOKIE_NAME = "sentry_session";
-
-const DEV_PROFILES: Record<string, Profile> = {
-  owner: {
-    id: "dev-owner-001",
-    github_username: "owner",
-    avatar_url: null,
-    full_name: "Owner",
-    role: "owner",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  admin: {
-    id: "dev-admin-001",
-    github_username: "admin",
-    avatar_url: null,
-    full_name: "Admin",
-    role: "admin",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  developer: {
-    id: "dev-dev-001",
-    github_username: "developer",
-    avatar_url: null,
-    full_name: "Developer",
-    role: "developer",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-};
+const JWT_SECRET = process.env.JWT_SECRET || "sentry-dev-secret";
 
 export async function getSession(): Promise<Profile | null> {
   const cookieStore = await cookies();
-  const session = cookieStore.get(COOKIE_NAME);
-  if (!session?.value) return null;
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!token) return null;
 
   try {
-    return JSON.parse(session.value) as Profile;
+    const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      github_username: user.username,
+      avatar_url: user.avatar,
+      full_name: user.fullName,
+      role: user.role as UserRole,
+      created_at: user.createdAt.toISOString(),
+      updated_at: user.updatedAt.toISOString(),
+    };
   } catch {
     return null;
   }
 }
 
-export function getDevProfiles() {
-  return DEV_PROFILES;
+export function createToken(userId: string): string {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 export { COOKIE_NAME };

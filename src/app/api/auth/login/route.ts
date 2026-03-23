@@ -1,32 +1,39 @@
 import { NextResponse } from "next/server";
-import { COOKIE_NAME, getDevProfiles } from "@/lib/auth";
-import type { UserRole } from "@/types/database";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/db";
+import { createToken, COOKIE_NAME } from "@/lib/auth";
 
 export async function POST(request: Request) {
-  const { username, role } = await request.json();
+  try {
+    const { username, password } = await request.json();
 
-  if (!username || !role) {
-    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json({ error: "Введите логин и пароль" }, { status: 400 });
+    }
+
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) {
+      return NextResponse.json({ error: "Неверный логин или пароль" }, { status: 401 });
+    }
+
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+      return NextResponse.json({ error: "Неверный логин или пароль" }, { status: 401 });
+    }
+
+    const token = createToken(user.id);
+
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    });
+
+    return response;
+  } catch {
+    return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
   }
-
-  const profiles = getDevProfiles();
-  const template = profiles[role as UserRole];
-  if (!template) {
-    return NextResponse.json({ error: "Invalid role" }, { status: 400 });
-  }
-
-  const profile = {
-    ...template,
-    github_username: username,
-    full_name: username,
-  };
-
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(COOKIE_NAME, JSON.stringify(profile), {
-    httpOnly: true,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
-  });
-
-  return response;
 }

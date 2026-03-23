@@ -32,6 +32,13 @@ export function NotificationBell() {
   useEffect(() => {
     setNotifications(getNotifications());
     setUnread(getUnreadCount());
+
+    const handler = () => {
+      setNotifications(getNotifications());
+      setUnread(getUnreadCount());
+    };
+    window.addEventListener("sentry_audit", handler);
+    return () => window.removeEventListener("sentry_audit", handler);
   }, []);
 
   const handleOpen = () => {

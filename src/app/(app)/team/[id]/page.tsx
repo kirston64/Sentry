@@ -1,8 +1,18 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { ArrowLeft, GitCommit, CheckSquare, GitPullRequest, Clock, MapPin } from "lucide-react";
-import { TEAM_MEMBERS } from "@/lib/mock-data";
+import {
+  GitCommit, CheckSquare, GitPullRequest, Clock,
+  Globe, MessageCircle, Send, Github, Briefcase,
+  AlertTriangle, Rocket,
+} from "lucide-react";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { TEAM_MEMBERS, DEPLOYS, SEED_INCIDENTS, SEED_TASKS } from "@/lib/mock-data";
+import type { Incident } from "@/types/incident";
+import type { Task } from "@/types/task";
 
 const roleColors = {
   owner: "bg-error/20 text-error",
@@ -10,132 +20,327 @@ const roleColors = {
   developer: "bg-accent/20 text-accent",
 };
 
-// Simulated recent activity per member
-const MEMBER_ACTIVITY: Record<string, { action: string; target: string; time: string }[]> = {
-  "tm-1": [
-    { action: "Обновил CI/CD pipeline", target: "deploy.yml", time: "2ч назад" },
-    { action: "Мёрж в main", target: "fivem-core", time: "5ч назад" },
-    { action: "Code review", target: "PR #41", time: "1д назад" },
-  ],
-  "tm-2": [
-    { action: "Фикс vehicle sync", target: "sync.lua", time: "30м назад" },
-    { action: "Обновил античит", target: "anticheat-v2", time: "3ч назад" },
-    { action: "Тест на dev сервере", target: "server-02", time: "6ч назад" },
-  ],
-  "tm-3": [
-    { action: "Дизайн нового инвентаря", target: "inventory-nui", time: "1ч назад" },
-    { action: "Пуш CSS стилей", target: "nui-styles", time: "4ч назад" },
-  ],
-  "tm-4": [
-    { action: "Миграция БД", target: "properties", time: "4ч назад" },
-    { action: "Оптимизация запросов", target: "player-data", time: "1д назад" },
-  ],
-  "tm-5": [
-    { action: "NPC AI патрулирование", target: "dealer-npc", time: "45м назад" },
-    { action: "Система торговли", target: "trade-system", time: "6ч назад" },
-  ],
-  "tm-6": [
-    { action: "Настройка firewall", target: "server-01", time: "12ч назад" },
-    { action: "SSL обновление", target: "nginx", time: "1д назад" },
-  ],
-  "tm-7": [
-    { action: "Интерьер банка", target: "bank-interior", time: "3ч назад" },
-    { action: "Экспорт моделей", target: "models/v3", time: "1д назад" },
-  ],
+const statusColors = {
+  todo: "text-text-muted",
+  in_progress: "text-warning",
+  done: "text-success",
 };
 
-export default async function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+const statusLabels = {
+  todo: "To Do",
+  in_progress: "В работе",
+  done: "Готово",
+};
+
+const priorityColors = {
+  low: "bg-text-muted/20 text-text-muted",
+  medium: "bg-primary/20 text-primary",
+  high: "bg-warning/20 text-warning",
+  critical: "bg-error/20 text-error",
+};
+
+const severityColors = {
+  P1: "bg-error/20 text-error",
+  P2: "bg-warning/20 text-warning",
+  P3: "bg-primary/20 text-primary",
+  P4: "bg-text-muted/20 text-text-muted",
+};
+
+const incidentStatusLabels: Record<string, string> = {
+  investigating: "Investigating",
+  identified: "Identified",
+  monitoring: "Monitoring",
+  resolved: "Resolved",
+};
+
+const deployStatusColors: Record<string, string> = {
+  success: "text-success",
+  failed: "text-error",
+  rolling: "text-warning",
+  pending: "text-text-muted",
+};
+
+function daysSince(dateStr: string) {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+}
+
+function SkillBar({ name, level }: { name: string; level: number }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-text-secondary">{name}</span>
+        <span className="text-text-muted">{level}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-surface-hover overflow-hidden">
+        <div
+          className={clsx(
+            "h-full rounded-full",
+            level >= 90 ? "bg-success" : level >= 70 ? "bg-primary" : level >= 50 ? "bg-warning" : "bg-text-muted"
+          )}
+          style={{ width: `${level}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const member = TEAM_MEMBERS.find((m) => m.id === id);
-  if (!member) notFound();
+
+  const [tasks] = useLocalStorage<Task[]>("sentry_tasks", SEED_TASKS);
+  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+
+  if (!member) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-text-muted">Участник не найден</p>
+      </div>
+    );
+  }
 
   const initials = member.fullName.split(" ").map((w) => w[0]).join("").slice(0, 2);
-  const activity = MEMBER_ACTIVITY[member.id] ?? [];
+  const memberDays = daysSince(member.joinedAt);
+
+  // Real data from the system
+  const myTasks = tasks.filter((t) => t.assigneeId === member.id);
+  const activeTasks = myTasks.filter((t) => t.status !== "done");
+  const doneTasks = myTasks.filter((t) => t.status === "done");
+
+  const myIncidents = incidents.filter((i) => i.assigneeId === member.id);
+  const activeIncidents = myIncidents.filter((i) => i.status !== "resolved");
+  const resolvedIncidents = myIncidents.filter((i) => i.status === "resolved");
+
+  const myDeploys = DEPLOYS.filter((d) => d.triggeredBy === member.username);
+  const failedDeploys = myDeploys.filter((d) => d.status === "failed");
 
   return (
     <div className="space-y-6">
-      <Link href="/team" className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-primary">
-        <ArrowLeft className="h-4 w-4" />
-        Назад к команде
-      </Link>
+      <Breadcrumbs items={[
+        { label: "Dashboard", href: "/dashboard" },
+        { label: "Team", href: "/team" },
+        { label: member.username },
+      ]} />
 
       {/* Profile header */}
       <div className="rounded-lg border border-border bg-surface p-6">
-        <div className="flex items-start gap-4">
-          <div className="relative">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 text-xl font-bold text-primary">
+        <div className="flex items-start gap-5">
+          <div className="relative shrink-0">
+            <div className={clsx("flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold", member.avatarColor)}>
               {initials}
             </div>
             <span
               className={clsx(
-                "absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-surface",
+                "absolute bottom-0.5 right-0.5 h-4 w-4 rounded-full border-2 border-surface",
                 member.isOnline ? "bg-success" : "bg-text-muted"
               )}
             />
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-text-primary">{member.username}</h2>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl font-bold text-text-primary">{member.username}</h2>
               <span className={clsx("rounded px-2 py-0.5 text-xs font-medium", roleColors[member.role])}>
                 {member.role}
               </span>
+              {member.isOnline && (
+                <span className="flex items-center gap-1 text-[10px] text-success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                  онлайн
+                </span>
+              )}
             </div>
             <p className="text-sm text-text-secondary">{member.fullName}</p>
-            <p className="mt-1 text-xs text-text-muted">
-              {member.isOnline ? "Сейчас онлайн" : `Был(а) ${new Date(member.lastActiveAt).toLocaleString("ru-RU")}`}
-            </p>
-          </div>
-        </div>
+            <p className="mt-2 text-xs text-text-secondary leading-relaxed">{member.bio}</p>
 
-        {/* Specialties */}
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {member.specialties.map((s) => (
-            <span key={s} className="rounded-md border border-border px-2 py-1 text-xs text-text-secondary">
-              {s}
-            </span>
-          ))}
-        </div>
-
-        {/* Stats grid */}
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <div className="rounded-md bg-surface-hover p-3 text-center">
-            <GitCommit className="mx-auto h-4 w-4 text-primary" />
-            <p className="mt-1 text-lg font-bold text-text-primary">{member.stats.commits}</p>
-            <p className="text-[10px] text-text-muted">Коммитов</p>
-          </div>
-          <div className="rounded-md bg-surface-hover p-3 text-center">
-            <CheckSquare className="mx-auto h-4 w-4 text-success" />
-            <p className="mt-1 text-lg font-bold text-text-primary">{member.stats.tasksCompleted}</p>
-            <p className="text-[10px] text-text-muted">Задач</p>
-          </div>
-          <div className="rounded-md bg-surface-hover p-3 text-center">
-            <GitPullRequest className="mx-auto h-4 w-4 text-accent" />
-            <p className="mt-1 text-lg font-bold text-text-primary">{member.stats.prsReviewed}</p>
-            <p className="text-[10px] text-text-muted">PR Reviews</p>
+            <div className="mt-3 flex items-center gap-3 flex-wrap text-[10px]">
+              <span className="flex items-center gap-1 text-text-muted"><Globe className="h-3 w-3" /> {member.timezone}</span>
+              <a
+                href={`https://t.me/${member.telegram.replace("@", "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded bg-[#229ED9]/10 px-2 py-0.5 text-[#229ED9] hover:bg-[#229ED9]/20 transition-colors"
+              >
+                <Send className="h-3 w-3" /> {member.telegram}
+              </a>
+              <a
+                href={`https://discord.com/users/${member.discord.split("#")[0]}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded bg-[#5865F2]/10 px-2 py-0.5 text-[#5865F2] hover:bg-[#5865F2]/20 transition-colors"
+              >
+                <MessageCircle className="h-3 w-3" /> {member.discord}
+              </a>
+              <a
+                href={`https://github.com/${member.github}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-text-secondary hover:bg-white/10 transition-colors"
+              >
+                <Github className="h-3 w-3" /> {member.github}
+              </a>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Recent activity */}
-      <div className="rounded-lg border border-border bg-surface">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <Clock className="h-4 w-4 text-text-muted" />
-          <h3 className="text-sm font-medium text-text-primary">Последняя активность</h3>
+      {/* Quick stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="rounded-lg border border-border bg-surface p-3 text-center">
+          <p className="text-lg font-bold text-text-primary">{memberDays}</p>
+          <p className="text-[10px] text-text-muted">дней в команде</p>
         </div>
-        <div className="divide-y divide-border">
-          {activity.map((a, i) => (
-            <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-text-secondary">{a.action}</span>
-                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs text-warning">{a.target}</span>
+        <div className="rounded-lg border border-border bg-surface p-3 text-center">
+          <p className="text-lg font-bold text-text-primary">{member.weeklyHours}ч</p>
+          <p className="text-[10px] text-text-muted">часов/неделя</p>
+        </div>
+        <div className="rounded-lg border border-border bg-surface p-3 text-center">
+          <p className="text-lg font-bold text-text-primary">{member.stats.commits}</p>
+          <p className="text-[10px] text-text-muted">коммитов</p>
+        </div>
+        <div className="rounded-lg border border-border bg-surface p-3 text-center">
+          <p className="text-lg font-bold text-text-primary">{member.stats.prsReviewed}</p>
+          <p className="text-[10px] text-text-muted">PR reviews</p>
+        </div>
+        <div className="rounded-lg border border-border bg-surface p-3 text-center">
+          <p className={clsx("text-lg font-bold", activeTasks.length > 0 ? "text-warning" : "text-success")}>{activeTasks.length}</p>
+          <p className="text-[10px] text-text-muted">активных задач</p>
+        </div>
+        <div className="rounded-lg border border-border bg-surface p-3 text-center">
+          <p className={clsx("text-lg font-bold", activeIncidents.length > 0 ? "text-error" : "text-success")}>{activeIncidents.length}</p>
+          <p className="text-[10px] text-text-muted">инцидентов</p>
+        </div>
+      </div>
+
+      {/* Active incidents alert */}
+      {activeIncidents.length > 0 && (
+        <div className="rounded-lg border border-error/40 bg-error/10 p-4 animate-alert-pulse">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-error" />
+            <h3 className="text-sm font-bold text-error">Активные инциденты ({activeIncidents.length})</h3>
+          </div>
+          {activeIncidents.map((inc) => (
+            <Link key={inc.id} href={`/incidents/${inc.id}`} className="flex items-center justify-between py-1.5 text-xs hover:bg-error/5 rounded px-2 -mx-2 transition-colors">
+              <div className="flex items-center gap-2">
+                <span className={clsx("rounded px-1.5 py-0.5 text-[10px] font-bold", severityColors[inc.severity])}>{inc.severity}</span>
+                <span className="text-text-secondary">{inc.title}</span>
               </div>
-              <span className="text-xs text-text-muted">{a.time}</span>
-            </div>
+              <span className="text-text-muted">{incidentStatusLabels[inc.status]}</span>
+            </Link>
           ))}
-          {activity.length === 0 && (
-            <p className="px-4 py-6 text-center text-sm text-text-muted">Нет активности</p>
-          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Assigned tasks */}
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-text-muted" />
+              <h3 className="text-sm font-medium text-text-primary">Задачи ({myTasks.length})</h3>
+            </div>
+            <Link href="/tasks" className="text-[10px] text-primary hover:underline">все задачи</Link>
+          </div>
+          <div className="divide-y divide-border">
+            {myTasks.length === 0 && (
+              <p className="px-4 py-6 text-center text-xs text-text-muted">Нет назначенных задач</p>
+            )}
+            {myTasks.map((task) => (
+              <div key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className={clsx("text-[10px] font-medium", statusColors[task.status])}>
+                  {statusLabels[task.status]}
+                </span>
+                <span className="flex-1 text-xs text-text-secondary truncate">{task.title}</span>
+                <span className={clsx("rounded px-1.5 py-0.5 text-[9px] font-medium", priorityColors[task.priority])}>
+                  {task.priority}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Deploys */}
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Rocket className="h-4 w-4 text-text-muted" />
+              <h3 className="text-sm font-medium text-text-primary">Деплои ({myDeploys.length})</h3>
+            </div>
+            <Link href="/deploys" className="text-[10px] text-primary hover:underline">все деплои</Link>
+          </div>
+          <div className="divide-y divide-border">
+            {myDeploys.length === 0 && (
+              <p className="px-4 py-6 text-center text-xs text-text-muted">Нет деплоев</p>
+            )}
+            {myDeploys.map((dep) => (
+              <div key={dep.id} className="flex items-center gap-3 px-4 py-2.5">
+                <span className={clsx("text-xs font-medium", deployStatusColors[dep.status])}>
+                  {dep.status === "failed" ? "FAIL" : "OK"}
+                </span>
+                <span className="text-xs text-accent">{dep.version}</span>
+                <span className="text-[10px] text-text-muted">→ {dep.environment}</span>
+                <span className="ml-auto text-[10px] text-text-muted">
+                  {new Date(dep.startedAt).toLocaleDateString("ru-RU")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Incident history */}
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-text-muted" />
+              <h3 className="text-sm font-medium text-text-primary">История инцидентов ({myIncidents.length})</h3>
+            </div>
+            <Link href="/incidents" className="text-[10px] text-primary hover:underline">все инциденты</Link>
+          </div>
+          <div className="divide-y divide-border">
+            {myIncidents.length === 0 && (
+              <p className="px-4 py-6 text-center text-xs text-text-muted">Нет инцидентов</p>
+            )}
+            {myIncidents.map((inc) => (
+              <Link key={inc.id} href={`/incidents/${inc.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-hover transition-colors">
+                <span className={clsx("rounded px-1.5 py-0.5 text-[9px] font-bold", severityColors[inc.severity])}>{inc.severity}</span>
+                <span className="flex-1 text-xs text-text-secondary truncate">{inc.title}</span>
+                <span className={clsx("text-[10px]", inc.status === "resolved" ? "text-success" : "text-warning")}>
+                  {incidentStatusLabels[inc.status]}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Skills */}
+        <div className="rounded-lg border border-border bg-surface p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Briefcase className="h-4 w-4 text-text-muted" />
+            <h3 className="text-sm font-medium text-text-primary">Навыки</h3>
+          </div>
+          <div className="space-y-3">
+            {member.skills.map((skill) => (
+              <SkillBar key={skill.name} name={skill.name} level={skill.level} />
+            ))}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-[10px] text-text-muted mb-2">Специализации</p>
+            <div className="flex flex-wrap gap-1.5">
+              {member.specialties.map((s) => (
+                <span key={s} className="rounded-md border border-border px-2 py-1 text-[10px] text-text-secondary">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-[10px] text-text-muted mb-1">Текущий проект</p>
+            <p className="text-xs text-accent">{member.currentProject}</p>
+          </div>
         </div>
       </div>
     </div>

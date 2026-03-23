@@ -1,24 +1,29 @@
 import type { Config } from "tailwindcss";
 
+function withOpacity(varName: string) {
+  return `rgb(var(${varName}) / <alpha-value>)`;
+}
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        background: "#1e1e1e",
-        surface: "#252526",
-        "surface-hover": "#2a2d2e",
-        border: "#3e3e42",
-        "border-focus": "#007fd4",
-        primary: "#007fd4",
-        "primary-hover": "#1a8fe8",
-        accent: "#4ec9b0",
-        warning: "#dcdcaa",
-        error: "#f44747",
-        success: "#6a9955",
-        "text-primary": "#d4d4d4",
-        "text-secondary": "#808080",
-        "text-muted": "#5a5a5a",
+        background: withOpacity("--color-background"),
+        bg: withOpacity("--color-background"),
+        surface: withOpacity("--color-surface"),
+        "surface-hover": withOpacity("--color-surface-hover"),
+        border: withOpacity("--color-border"),
+        "border-focus": withOpacity("--color-border-focus"),
+        primary: withOpacity("--color-primary"),
+        "primary-hover": withOpacity("--color-primary-hover"),
+        accent: withOpacity("--color-accent"),
+        warning: withOpacity("--color-warning"),
+        error: withOpacity("--color-error"),
+        success: withOpacity("--color-success"),
+        "text-primary": withOpacity("--color-text-primary"),
+        "text-secondary": withOpacity("--color-text-secondary"),
+        "text-muted": withOpacity("--color-text-muted"),
       },
       fontFamily: {
         mono: ['"JetBrains Mono"', '"Fira Code"', "monospace"],

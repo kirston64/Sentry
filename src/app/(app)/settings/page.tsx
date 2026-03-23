@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { canManageUsers } from "@/lib/rbac";
+import { canViewSettings, canManageUsers } from "@/lib/rbac";
+import { AccessDenied } from "@/components/auth/access-denied";
 import { Settings, Users } from "lucide-react";
 
 const MOCK_USERS = [
@@ -13,6 +14,10 @@ const MOCK_USERS = [
 export default async function SettingsPage() {
   const profile = await getSession();
   if (!profile) redirect("/");
+
+  if (!canViewSettings(profile.role)) {
+    return <AccessDenied message="Настройки доступны только для Admin и Owner." />;
+  }
 
   const isOwner = canManageUsers(profile.role);
 

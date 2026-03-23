@@ -1,7 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
-import { GripVertical } from "lucide-react";
+import { GripVertical, AlertTriangle } from "lucide-react";
 import { TEAM_MEMBERS } from "@/lib/mock-data";
 import type { Task } from "@/types/task";
 
@@ -43,14 +43,22 @@ export function TaskCard({ task, onEdit, onDragStart }: TaskCardProps) {
               </span>
             ))}
           </div>
-          {assignee && (
-            <div className="mt-2 flex items-center gap-1.5">
-              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-[8px] font-bold text-primary">
-                {assignee.username[0]}
+          <div className="mt-2 flex items-center gap-2">
+            {assignee && (
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-[8px] font-bold text-primary">
+                  {assignee.username[0]}
+                </div>
+                <span className="text-[10px] text-text-muted">{assignee.username}</span>
               </div>
-              <span className="text-[10px] text-text-muted">{assignee.username}</span>
-            </div>
-          )}
+            )}
+            {task.incidentId && (
+              <span className="flex items-center gap-0.5 rounded bg-error/10 px-1 py-0.5 text-[9px] text-error">
+                <AlertTriangle className="h-2.5 w-2.5" />
+                INC
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>

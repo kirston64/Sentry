@@ -7,6 +7,15 @@ export interface IncidentEvent {
   author: string;
 }
 
+export interface Postmortem {
+  whatBroke: string;
+  rootCause: string;
+  fix: string;
+  prevention: string;
+  author: string;
+  writtenAt: string;
+}
+
 export interface Incident {
   id: string;
   title: string;
@@ -16,4 +25,5 @@ export interface Incident {
   timeline: IncidentEvent[];
   createdAt: string;
   resolvedAt: string | null;
+  postmortem?: Postmortem;
 }

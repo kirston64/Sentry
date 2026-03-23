@@ -10,7 +10,7 @@ interface AnimatedCounterProps {
 
 export function AnimatedCounter({ value, duration = 800, className }: AnimatedCounterProps) {
   const [display, setDisplay] = useState(0);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number>(0);
 
   useEffect(() => {
     const start = performance.now();
