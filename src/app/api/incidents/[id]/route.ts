@@ -61,10 +61,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (body.postmortem) {
+      const { whatBroke, rootCause, fix, prevention } = body.postmortem;
       await prisma.postmortem.upsert({
         where: { incidentId: id },
-        create: { incidentId: id, ...body.postmortem, authorId: profile.id },
-        update: { ...body.postmortem },
+        create: { incidentId: id, whatBroke, rootCause, fix, prevention, authorId: profile.id },
+        update: { whatBroke, rootCause, fix, prevention },
       });
     }
 

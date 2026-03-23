@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import {
@@ -9,10 +9,10 @@ import {
   AlertTriangle, Rocket,
 } from "lucide-react";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { TEAM_MEMBERS, DEPLOYS, SEED_INCIDENTS, SEED_TASKS } from "@/lib/mock-data";
+import { getTeamMemberById, type ApiUser } from "@/lib/team-display-data";
 import type { Incident } from "@/types/incident";
 import type { Task } from "@/types/task";
+import type { TeamMember } from "@/types/team";
 
 const roleColors = {
   owner: "bg-error/20 text-error",
@@ -60,6 +60,16 @@ const deployStatusColors: Record<string, string> = {
   pending: "text-text-muted",
 };
 
+interface Deploy {
+  id: string;
+  version: string;
+  environment: string;
+  status: string;
+  triggeredBy: string;
+  user?: { id: string; username: string; fullName: string };
+  startedAt: string;
+}
+
 function daysSince(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
 }
@@ -86,10 +96,35 @@ function SkillBar({ name, level }: { name: string; level: number }) {
 
 export default function MemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const member = TEAM_MEMBERS.find((m) => m.id === id);
+  const [member, setMember] = useState<TeamMember | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [deploys, setDeploys] = useState<Deploy[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [tasks] = useLocalStorage<Task[]>("sentry_tasks", SEED_TASKS);
-  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/users").then((r) => r.json()),
+      fetch("/api/tasks").then((r) => r.json()),
+      fetch("/api/incidents").then((r) => r.json()),
+      fetch("/api/deploys").then((r) => r.json()),
+    ]).then(([users, tasksData, incidentsData, deploysData]) => {
+      const m = getTeamMemberById(id, users as ApiUser[]);
+      setMember(m ?? null);
+      setTasks(tasksData);
+      setIncidents(incidentsData);
+      setDeploys(deploysData);
+    }).catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-text-muted animate-pulse">Загрузка...</p>
+      </div>
+    );
+  }
 
   if (!member) {
     return (
@@ -102,17 +137,14 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
   const initials = member.fullName.split(" ").map((w) => w[0]).join("").slice(0, 2);
   const memberDays = daysSince(member.joinedAt);
 
-  // Real data from the system
   const myTasks = tasks.filter((t) => t.assigneeId === member.id);
   const activeTasks = myTasks.filter((t) => t.status !== "done");
   const doneTasks = myTasks.filter((t) => t.status === "done");
 
   const myIncidents = incidents.filter((i) => i.assigneeId === member.id);
   const activeIncidents = myIncidents.filter((i) => i.status !== "resolved");
-  const resolvedIncidents = myIncidents.filter((i) => i.status === "resolved");
 
-  const myDeploys = DEPLOYS.filter((d) => d.triggeredBy === member.username);
-  const failedDeploys = myDeploys.filter((d) => d.status === "failed");
+  const myDeploys = deploys.filter((d) => d.triggeredBy === member.id || d.user?.username === member.username);
 
   return (
     <div className="space-y-6">
@@ -155,30 +187,36 @@ export default function MemberDetailPage({ params }: { params: Promise<{ id: str
 
             <div className="mt-3 flex items-center gap-3 flex-wrap text-[10px]">
               <span className="flex items-center gap-1 text-text-muted"><Globe className="h-3 w-3" /> {member.timezone}</span>
-              <a
-                href={`https://t.me/${member.telegram.replace("@", "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded bg-[#229ED9]/10 px-2 py-0.5 text-[#229ED9] hover:bg-[#229ED9]/20 transition-colors"
-              >
-                <Send className="h-3 w-3" /> {member.telegram}
-              </a>
-              <a
-                href={`https://discord.com/users/${member.discord.split("#")[0]}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded bg-[#5865F2]/10 px-2 py-0.5 text-[#5865F2] hover:bg-[#5865F2]/20 transition-colors"
-              >
-                <MessageCircle className="h-3 w-3" /> {member.discord}
-              </a>
-              <a
-                href={`https://github.com/${member.github}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-text-secondary hover:bg-white/10 transition-colors"
-              >
-                <Github className="h-3 w-3" /> {member.github}
-              </a>
+              {member.telegram && (
+                <a
+                  href={`https://t.me/${member.telegram.replace("@", "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded bg-[#229ED9]/10 px-2 py-0.5 text-[#229ED9] hover:bg-[#229ED9]/20 transition-colors"
+                >
+                  <Send className="h-3 w-3" /> {member.telegram}
+                </a>
+              )}
+              {member.discord && (
+                <a
+                  href={`https://discord.com/users/${member.discord.split("#")[0]}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded bg-[#5865F2]/10 px-2 py-0.5 text-[#5865F2] hover:bg-[#5865F2]/20 transition-colors"
+                >
+                  <MessageCircle className="h-3 w-3" /> {member.discord}
+                </a>
+              )}
+              {member.github && (
+                <a
+                  href={`https://github.com/${member.github}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-text-secondary hover:bg-white/10 transition-colors"
+                >
+                  <Github className="h-3 w-3" /> {member.github}
+                </a>
+              )}
             </div>
           </div>
         </div>

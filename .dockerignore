@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env*
+!.env.production.example
+prisma/dev.db
+prisma/dev.db-shm
+prisma/dev.db-wal
+prisma/dev.db-journal
+nginx/ssl
+*.tsbuildinfo
+next-env.d.ts

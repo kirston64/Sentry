@@ -2,7 +2,6 @@
 
 import { clsx } from "clsx";
 import { GripVertical, AlertTriangle } from "lucide-react";
-import { TEAM_MEMBERS } from "@/lib/mock-data";
 import type { Task } from "@/types/task";
 
 const priorityConfig = {
@@ -19,7 +18,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onEdit, onDragStart }: TaskCardProps) {
-  const assignee = TEAM_MEMBERS.find((m) => m.id === task.assigneeId);
+  const assignee = task.assignee;
   const p = priorityConfig[task.priority];
 
   return (

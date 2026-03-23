@@ -2,8 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { TEAM_MEMBERS } from "@/lib/mock-data";
 import type { Task, TaskPriority, TaskStatus } from "@/types/task";
+
+interface UserOption {
+  id: string;
+  username: string;
+  fullName: string;
+}
 
 interface TaskModalProps {
   task: Task | null;
@@ -19,6 +24,11 @@ export function TaskModal({ task, defaultStatus = "todo", onSave, onDelete, onCl
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [tags, setTags] = useState("");
+  const [users, setUsers] = useState<UserOption[]>([]);
+
+  useEffect(() => {
+    fetch("/api/users").then(r => r.json()).then(setUsers).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (task) {
@@ -91,7 +101,7 @@ export function TaskModal({ task, defaultStatus = "todo", onSave, onDelete, onCl
                 className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-border-focus"
               >
                 <option value="">Не назначен</option>
-                {TEAM_MEMBERS.map((m) => (
+                {users.map((m) => (
                   <option key={m.id} value={m.id}>{m.username}</option>
                 ))}
               </select>

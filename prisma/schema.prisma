@@ -36,6 +36,7 @@ model User {
   deploys          Deploy[]
   auditLogs        AuditLog[]
   incidentEvents   IncidentEvent[]
+  wikiArticles     WikiArticle[]   @relation("WikiAuthor")
 }
 
 model Session {
@@ -106,9 +107,11 @@ model Server {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  metrics  ServerMetrics[]
-  deploys  Deploy[]
-  logs     LogEntry[]
+  metrics           ServerMetrics[]
+  deploys           Deploy[]
+  logs              LogEntry[]
+  uptimeChecks      UptimeCheck[]
+  scheduledRestarts ScheduledRestart[]
 }
 
 model ServerMetrics {
@@ -219,6 +222,61 @@ model LogEntry {
   createdAt DateTime @default(now())
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// ============ WIKI / NOTES ============
+
+model WikiArticle {
+  id         String   @id @default(cuid())
+  title      String
+  slug       String   @unique
+  content    String   // markdown
+  category   String   @default("general") // general, guides, changelog, architecture
+  authorId   String
+  pinned     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  author User @relation("WikiAuthor", fields: [authorId], references: [id])
+}
+
+// ============ UPTIME CHECKS ============
+
+model UptimeCheck {
+  id         String   @id @default(cuid())
+  serverId   String
+  status     String   // up, down, timeout
+  responseMs Int?
+  createdAt  DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// ============ SCHEDULED RESTARTS ============
+
+model ScheduledRestart {
+  id         String   @id @default(cuid())
+  serverId   String
+  cronExpr   String   // e.g. "0 6 * * *"
+  label      String?  // e.g. "Daily 6:00 MSK"
+  enabled    Boolean  @default(true)
+  lastRunAt  DateTime?
+  createdBy  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// ============ WEBHOOK SETTINGS ============
+
+model WebhookConfig {
+  id        String  @id @default(cuid())
+  type      String  @unique // telegram, discord, github
+  url       String
+  secret    String? // for GitHub webhook signature
+  enabled   Boolean @default(true)
+  events    String  @default("[]") // JSON array of event types
 }
 
 // ============ AUDIT ============

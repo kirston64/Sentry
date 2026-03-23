@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { clsx } from "clsx";
 import { Clock } from "lucide-react";
-import { TEAM_MEMBERS } from "@/lib/mock-data";
 import type { Incident } from "@/types/incident";
 
 const severityConfig = {
@@ -28,7 +27,7 @@ function timeAgo(dateStr: string) {
 export function IncidentCard({ incident }: { incident: Incident }) {
   const sev = severityConfig[incident.severity];
   const st = statusConfig[incident.status];
-  const assignee = TEAM_MEMBERS.find((m) => m.id === incident.assigneeId);
+  const assignee = incident.assignee;
 
   return (
     <Link

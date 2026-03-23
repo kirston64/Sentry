@@ -3,9 +3,14 @@ node_modules/
 out/
 .env
 .env*.local
+.env.production
 *.tsbuildinfo
 next-env.d.ts
 
 /src/generated/prisma
 prisma/dev.db
+prisma/dev.db-shm
+prisma/dev.db-wal
 prisma/dev.db-journal
+
+nginx/ssl/

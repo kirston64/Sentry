@@ -3,29 +3,20 @@
 import { useState, useMemo, useEffect } from "react";
 import { Users, Filter } from "lucide-react";
 import { MemberCard } from "@/components/team/member-card";
-import { TEAM_MEMBERS } from "@/lib/mock-data";
+import { enrichUsers, type ApiUser } from "@/lib/team-display-data";
 import type { UserRole } from "@/types/database";
 import type { TeamMember } from "@/types/team";
 
 export default function TeamPage() {
-  const [members, setMembers] = useState<TeamMember[]>(TEAM_MEMBERS);
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [onlineFilter, setOnlineFilter] = useState<"all" | "online" | "offline">("all");
 
-  // Enrich TEAM_MEMBERS with real user data from API
   useEffect(() => {
-    fetch("/api/users").then(r => r.json()).then((users) => {
-      const enriched = TEAM_MEMBERS.map(m => {
-        const dbUser = users.find((u: { username: string }) =>
-          u.username.toLowerCase() === m.username.toLowerCase()
-        );
-        if (dbUser) {
-          return { ...m, id: dbUser.id, bio: dbUser.bio || m.bio };
-        }
-        return m;
-      });
-      setMembers(enriched);
-    });
+    fetch("/api/users")
+      .then((r) => r.json())
+      .then((users: ApiUser[]) => setMembers(enrichUsers(users)))
+      .catch(() => {});
   }, []);
 
   const filtered = useMemo(() => {

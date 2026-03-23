@@ -6,6 +6,8 @@ export interface Task {
   title: string;
   description: string;
   assigneeId: string | null;
+  assignee?: { id: string; username: string; fullName: string } | null;
+  creator?: { id: string; username: string; fullName: string } | null;
   priority: TaskPriority;
   status: TaskStatus;
   tags: string[];

@@ -22,6 +22,7 @@ export interface Incident {
   severity: Severity;
   status: IncidentStatus;
   assigneeId: string | null;
+  assignee?: { id: string; username: string; fullName: string } | null;
   timeline: IncidentEvent[];
   createdAt: string;
   resolvedAt: string | null;

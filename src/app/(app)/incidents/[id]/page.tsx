@@ -1,13 +1,10 @@
 "use client";
 
-import { use, useState } from "react";
-import Link from "next/link";
+import { use, useState, useEffect } from "react";
 import { clsx } from "clsx";
 import { AlertTriangle, FileText, Save, Edit3 } from "lucide-react";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { IncidentTimeline } from "@/components/incidents/incident-timeline";
-import { SEED_INCIDENTS, TEAM_MEMBERS } from "@/lib/mock-data";
 import { useProfile } from "@/components/auth/profile-context";
 import type { Incident, Postmortem } from "@/types/incident";
 
@@ -28,13 +25,51 @@ const statusConfig = {
 export default function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const profile = useProfile();
-  const [incidents, setIncidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
-  const incident = incidents.find((i) => i.id === id);
+  const [incident, setIncident] = useState<Incident | null>(null);
+  const [loading, setLoading] = useState(true);
   const [editingPostmortem, setEditingPostmortem] = useState(false);
   const [pmForm, setPmForm] = useState<Postmortem>({
     whatBroke: "", rootCause: "", fix: "", prevention: "",
     author: profile.github_username ?? "Unknown", writtenAt: new Date().toISOString(),
   });
+
+  useEffect(() => {
+    fetch(`/api/incidents/${id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        // Transform timeline author from relation object to string
+        if (data.timeline) {
+          data.timeline = data.timeline.map((e: { timestamp?: string; createdAt?: string; message: string; author?: { username: string } | string }) => ({
+            timestamp: e.timestamp || e.createdAt,
+            message: e.message,
+            author: typeof e.author === "object" && e.author ? e.author.username : (e.author ?? "system"),
+          }));
+        }
+        // Transform postmortem to match frontend Postmortem type
+        if (data.postmortem) {
+          const pm = data.postmortem;
+          data.postmortem = {
+            whatBroke: pm.whatBroke,
+            rootCause: pm.rootCause,
+            fix: pm.fix,
+            prevention: pm.prevention,
+            author: pm.author?.username ?? data.creator?.username ?? "Unknown",
+            writtenAt: pm.writtenAt ?? pm.createdAt ?? pm.updatedAt,
+          };
+        }
+        setIncident(data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-text-muted animate-pulse">Загрузка...</p>
+      </div>
+    );
+  }
 
   if (!incident) {
     return (
@@ -46,13 +81,25 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
 
   const sev = severityConfig[incident.severity];
   const st = statusConfig[incident.status];
-  const assignee = TEAM_MEMBERS.find((m) => m.id === incident.assigneeId);
+  const assignee = incident.assignee;
 
   const durationMs = incident.resolvedAt
     ? new Date(incident.resolvedAt).getTime() - new Date(incident.createdAt).getTime()
     : Date.now() - new Date(incident.createdAt).getTime();
   const durationHours = Math.floor(durationMs / 3600000);
   const durationMins = Math.floor((durationMs % 3600000) / 60000);
+
+  const savePostmortem = async (postmortem: Postmortem) => {
+    const res = await fetch(`/api/incidents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ postmortem }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setIncident(updated);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -180,9 +227,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                     author: profile.github_username ?? "Unknown",
                     writtenAt: new Date().toISOString(),
                   };
-                  setIncidents((prev) =>
-                    prev.map((i) => (i.id === incident.id ? { ...i, postmortem } : i))
-                  );
+                  savePostmortem(postmortem);
                   setEditingPostmortem(false);
                 }}
                 disabled={!pmForm.whatBroke || !pmForm.rootCause || !pmForm.fix || !pmForm.prevention}

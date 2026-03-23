@@ -1,19 +1,58 @@
 "use client";
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useEffect } from "react";
 import { clsx } from "clsx";
 import {
-  Users, Clock, Cpu, HardDrive, Activity, Globe, Wifi, Server as ServerIcon,
+  Users, Clock, Cpu, HardDrive, Activity, Globe, Wifi, Server as ServerIcon, CalendarClock, Plus, Power, Trash2,
 } from "lucide-react";
-import { useInterval } from "@/hooks/useInterval";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { ServerStatusDot } from "@/components/servers/server-status-dot";
 import { GaugeBar } from "@/components/servers/gauge-bar";
 import { LineChart } from "@/components/charts/line-chart";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
-import { SERVERS, BASE_METRICS, PLAYER_HISTORY_24H, DEPLOYS, SEED_INCIDENTS } from "@/lib/mock-data";
-import type { ServerMetrics } from "@/types/server";
-import type { Incident } from "@/types/incident";
+import { useProfile } from "@/components/auth/profile-context";
+import { hasRole } from "@/lib/rbac";
+import type { ServerStatus } from "@/types/server";
+
+interface Metrics {
+  playersOnline: number;
+  cpuPercent: number;
+  ramPercent: number;
+  uptimeSeconds: number;
+  tickRate: number;
+  createdAt?: string;
+}
+
+interface DeployInfo {
+  id: string;
+  version: string;
+  environment: string;
+  status: string;
+  commitMsg: string;
+  startedAt: string;
+  user: { username: string; fullName: string };
+}
+
+interface ScheduledRestart {
+  id: string;
+  cronExpr: string;
+  label: string | null;
+  enabled: boolean;
+  lastRunAt: string | null;
+}
+
+interface ServerData {
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
+  maxPlayers: number;
+  status: string;
+  gameMode: string;
+  mapName: string;
+  metrics: Metrics[];
+  currentMetrics: Metrics | null;
+  deploys: DeployInfo[];
+}
 
 function formatUptime(seconds: number) {
   const d = Math.floor(seconds / 86400);
@@ -24,35 +63,44 @@ function formatUptime(seconds: number) {
   return `${m}м`;
 }
 
-function jitter(base: number, range: number, min: number, max: number) {
-  const val = base + (Math.random() - 0.5) * 2 * range;
-  return Math.min(max, Math.max(min, Math.round(val)));
-}
-
-const HOURS = Array.from({ length: 24 }, (_, i) => `${i}:00`);
-
 export default function ServerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const server = SERVERS.find((s) => s.id === id);
-  const [incidents] = useLocalStorage<Incident[]>("sentry_incidents", SEED_INCIDENTS);
+  const profile = useProfile();
+  const [server, setServer] = useState<ServerData | null>(null);
+  const [restarts, setRestarts] = useState<ScheduledRestart[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newCron, setNewCron] = useState("");
+  const [newLabel, setNewLabel] = useState("");
 
-  const baseMetrics = BASE_METRICS[id] ?? { playersOnline: 0, cpuPercent: 0, ramPercent: 0, uptimeSeconds: 0, tickRate: 0 };
-  const [metrics, setMetrics] = useState<ServerMetrics>(baseMetrics);
+  const fetchData = async () => {
+    try {
+      const [srvRes, restartRes] = await Promise.all([
+        fetch(`/api/servers/${id}`),
+        fetch(`/api/servers/${id}/restarts`),
+      ]);
+      if (srvRes.ok) setServer(await srvRes.json());
+      if (restartRes.ok) setRestarts(await restartRes.json());
+    } catch { /* */ }
+    setLoading(false);
+  };
 
-  const isOnline = server?.status === "online";
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, [id]);
 
-  const tick = useCallback(() => {
-    if (!isOnline || !server) return;
-    setMetrics((prev) => ({
-      playersOnline: jitter(prev.playersOnline, 3, 0, server.maxPlayers),
-      cpuPercent: jitter(prev.cpuPercent, 4, 5, 98),
-      ramPercent: jitter(prev.ramPercent, 2, 10, 95),
-      uptimeSeconds: prev.uptimeSeconds + 3,
-      tickRate: jitter(prev.tickRate, 1, 58, 66),
-    }));
-  }, [isOnline, server]);
-
-  useInterval(tick, isOnline ? 3000 : null);
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-6 w-48 animate-pulse rounded bg-surface" />
+        <div className="h-32 animate-pulse rounded-lg bg-surface" />
+        <div className="grid grid-cols-6 gap-3">
+          {[1,2,3,4,5,6].map(i => <div key={i} className="h-20 animate-pulse rounded-lg bg-surface" />)}
+        </div>
+      </div>
+    );
+  }
 
   if (!server) {
     return (
@@ -62,9 +110,40 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  // Related deploys for this server
-  const env = server.name.includes("Dev") ? "development" : server.name.includes("Event") ? "staging" : "production";
-  const serverDeploys = DEPLOYS.filter((d) => d.environment === env).slice(0, 5);
+  const metrics = server.currentMetrics || { playersOnline: 0, cpuPercent: 0, ramPercent: 0, uptimeSeconds: 0, tickRate: 0 };
+  const isOnline = server.status === "online";
+  const playerHistory = server.metrics.map((m) => m.playersOnline);
+  const hours = server.metrics.map((m) => {
+    if (!m.createdAt) return "";
+    const d = new Date(m.createdAt);
+    return `${d.getHours()}:00`;
+  }).filter((_, i) => i % 4 === 0);
+
+  const addRestart = async () => {
+    if (!newCron.trim()) return;
+    await fetch(`/api/servers/${id}/restarts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cronExpr: newCron, label: newLabel || null }),
+    });
+    setNewCron("");
+    setNewLabel("");
+    fetchData();
+  };
+
+  const toggleRestart = async (restartId: string, enabled: boolean) => {
+    await fetch(`/api/servers/${id}/restarts/${restartId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    fetchData();
+  };
+
+  const deleteRestart = async (restartId: string) => {
+    await fetch(`/api/servers/${id}/restarts/${restartId}`, { method: "DELETE" });
+    fetchData();
+  };
 
   return (
     <div className="space-y-6">
@@ -83,9 +162,9 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
           <div className="flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-text-primary">{server.name}</h1>
-              <ServerStatusDot status={server.status} />
-              <span className={clsx("text-xs font-medium", isOnline ? "text-success" : "text-error")}>
-                {isOnline ? "Online" : "Offline"}
+              <ServerStatusDot status={server.status as ServerStatus} />
+              <span className={clsx("text-xs font-medium", isOnline ? "text-success" : server.status === "restarting" ? "text-warning" : "text-error")}>
+                {isOnline ? "Online" : server.status === "restarting" ? "Restarting" : "Offline"}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-4 text-xs text-text-muted">
@@ -154,41 +233,99 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
           </div>
 
           {/* Player chart */}
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <h3 className="mb-3 text-xs font-medium text-text-primary">Игроки за 24 часа</h3>
-            <div className="h-40">
-              <LineChart
-                data={PLAYER_HISTORY_24H}
-                color="#007fd4"
-                labels={HOURS.filter((_, i) => i % 4 === 0)}
-              />
+          {playerHistory.length > 0 && (
+            <div className="rounded-lg border border-border bg-surface p-4">
+              <h3 className="mb-3 text-xs font-medium text-text-primary">Игроки за 24 часа</h3>
+              <div className="h-40">
+                <LineChart data={playerHistory} color="#007fd4" labels={hours} />
+              </div>
             </div>
-          </div>
+          )}
         </>
       ) : (
         <div className="rounded-lg border border-error/40 bg-error/10 p-8 text-center">
           <ServerIcon className="h-8 w-8 text-error mx-auto mb-2" />
-          <p className="text-sm text-error font-medium">Сервер офлайн</p>
+          <p className="text-sm text-error font-medium">{server.status === "restarting" ? "Сервер перезапускается..." : "Сервер офлайн"}</p>
           <p className="text-xs text-text-muted mt-1">Последние данные недоступны</p>
         </div>
       )}
 
-      {/* Recent deploys for this server */}
+      {/* Scheduled Restarts */}
       <div className="rounded-lg border border-border bg-surface">
-        <div className="border-b border-border px-4 py-3">
-          <h3 className="text-sm font-medium text-text-primary">Последние деплои ({env})</h3>
+        <div className="border-b border-border px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="h-4 w-4 text-text-muted" />
+            <h3 className="text-sm font-medium text-text-primary">Расписание рестартов</h3>
+          </div>
         </div>
         <div className="divide-y divide-border">
-          {serverDeploys.length === 0 ? (
+          {restarts.map((r) => (
+            <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+              <button
+                onClick={() => toggleRestart(r.id, !r.enabled)}
+                className={clsx("h-2 w-2 rounded-full", r.enabled ? "bg-success" : "bg-text-muted/30")}
+                title={r.enabled ? "Активно" : "Отключено"}
+              />
+              <code className="text-xs text-accent font-mono">{r.cronExpr}</code>
+              <span className="flex-1 text-xs text-text-muted truncate">{r.label || ""}</span>
+              {r.lastRunAt && <span className="text-[10px] text-text-muted">Last: {new Date(r.lastRunAt).toLocaleString("ru-RU")}</span>}
+              {hasRole(profile.role, "admin") && (
+                <button onClick={() => deleteRestart(r.id)} className="text-text-muted hover:text-error transition-colors">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+          {restarts.length === 0 && (
+            <p className="px-4 py-4 text-center text-xs text-text-muted">Нет запланированных рестартов</p>
+          )}
+        </div>
+
+        {/* Add restart form */}
+        {hasRole(profile.role, "admin") && (
+          <div className="border-t border-border px-4 py-3 flex items-center gap-2">
+            <input
+              type="text"
+              value={newCron}
+              onChange={(e) => setNewCron(e.target.value)}
+              placeholder="0 6 * * *"
+              className="w-28 rounded border border-border bg-bg px-2 py-1 text-xs text-text-primary font-mono outline-none focus:border-primary"
+            />
+            <input
+              type="text"
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="Label (optional)"
+              className="flex-1 rounded border border-border bg-bg px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+            />
+            <button
+              onClick={addRestart}
+              disabled={!newCron.trim()}
+              className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-white hover:bg-primary-hover disabled:opacity-50"
+            >
+              <Plus className="h-3 w-3" /> Add
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Recent deploys */}
+      <div className="rounded-lg border border-border bg-surface">
+        <div className="border-b border-border px-4 py-3">
+          <h3 className="text-sm font-medium text-text-primary">Последние деплои</h3>
+        </div>
+        <div className="divide-y divide-border">
+          {server.deploys.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-text-muted">Нет деплоев</p>
           ) : (
-            serverDeploys.map((dep) => (
+            server.deploys.map((dep) => (
               <div key={dep.id} className="flex items-center gap-3 px-4 py-2.5">
                 <span className={clsx("text-xs font-medium", dep.status === "success" ? "text-success" : dep.status === "failed" ? "text-error" : "text-warning")}>
                   {dep.status === "success" ? "OK" : dep.status === "failed" ? "FAIL" : dep.status.toUpperCase()}
                 </span>
                 <span className="text-xs text-accent">{dep.version}</span>
                 <span className="flex-1 text-[10px] text-text-muted truncate">{dep.commitMsg}</span>
+                <span className="text-[10px] text-text-muted">{dep.user.fullName}</span>
                 <span className="text-[10px] text-text-muted">{new Date(dep.startedAt).toLocaleDateString("ru-RU")}</span>
               </div>
             ))

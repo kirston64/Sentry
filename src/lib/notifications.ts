@@ -1,17 +1,9 @@
 import { getItem, setItem } from "@/lib/storage";
-import { SEED_NOTIFICATIONS } from "@/lib/mock-data";
 import type { Notification } from "@/types/notification";
 
 const KEY = "sentry_notifications";
-const SEEDED_KEY = "sentry_notifications_seeded";
 
 export function getNotifications(): Notification[] {
-  const seeded = getItem<boolean>(SEEDED_KEY, false);
-  if (!seeded) {
-    setItem(KEY, SEED_NOTIFICATIONS);
-    setItem(SEEDED_KEY, true);
-    return SEED_NOTIFICATIONS;
-  }
   return getItem<Notification[]>(KEY, []);
 }
 

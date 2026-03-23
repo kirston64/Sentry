@@ -1,19 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TerminalSquare, Lock } from "lucide-react";
 import { Terminal } from "@/components/console/terminal";
-import { SERVERS } from "@/lib/mock-data";
 import { useProfile } from "@/components/auth/profile-context";
 import { canUseConsole } from "@/lib/rbac";
 import { clsx } from "clsx";
 
+interface ServerInfo {
+  id: string;
+  name: string;
+  status: string;
+  gameMode: string;
+}
+
 export default function ConsolePage() {
   const profile = useProfile();
-  const onlineServers = SERVERS.filter((s) => s.status === "online");
-  const [activeServer, setActiveServer] = useState(onlineServers[0]?.id ?? "");
+  const [servers, setServers] = useState<ServerInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeServer, setActiveServer] = useState("");
 
-  const server = SERVERS.find((s) => s.id === activeServer);
+  useEffect(() => {
+    fetch("/api/servers")
+      .then((r) => r.json())
+      .then((data: ServerInfo[]) => {
+        setServers(data);
+        const online = data.filter((s) => s.status === "online");
+        if (online.length > 0) setActiveServer(online[0].id);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const server = servers.find((s) => s.id === activeServer);
+
+  if (loading) {
+    return (
+      <div className="flex h-[calc(100vh-3rem)] flex-col gap-4">
+        <div className="h-6 w-32 animate-pulse rounded bg-surface" />
+        <div className="flex-1 animate-pulse rounded-lg bg-surface" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col gap-4">
@@ -24,7 +51,7 @@ export default function ConsolePage() {
 
       {/* Server tabs */}
       <div className="flex gap-1">
-        {SERVERS.map((s) => {
+        {servers.map((s) => {
           const isProd = s.gameMode !== "Development";
           const locked = !canUseConsole(profile.role, isProd ? "production" : "development");
           const disabled = s.status !== "online" || locked;

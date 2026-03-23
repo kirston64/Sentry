@@ -20,7 +20,12 @@ export async function middleware(request: NextRequest) {
       await jwtVerify(token, JWT_SECRET);
       validSession = true;
     } catch {
-      // Invalid/expired token — clear it
+      // Invalid/expired token — clear it and continue to login page
+      if (isAuthPage) {
+        const response = NextResponse.next();
+        response.cookies.delete(COOKIE_NAME);
+        return response;
+      }
       const response = NextResponse.redirect(new URL("/", request.url));
       response.cookies.delete(COOKIE_NAME);
       return response;
