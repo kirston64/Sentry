@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Trash2, Ban, ShieldCheck, KeyRound, UserPlus, X, Eye, EyeOff, ChevronDown } from "lucide-react";
+import { AlertTriangle, Trash2, Ban, ShieldCheck, KeyRound, UserPlus, X, Eye, EyeOff, ChevronDown, Briefcase } from "lucide-react";
+import { PROFESSIONS, getProfession, parseSpecialties } from "@/lib/professions";
 
 interface UserData {
   id: string;
@@ -11,6 +12,7 @@ interface UserData {
   createdAt: string;
   passwordChangedAt: string;
   banned?: boolean;
+  specialties?: string; // JSON string
 }
 
 const roleColors: Record<string, string> = {
@@ -230,6 +232,67 @@ function BanModal({ user, onClose, onDone }: { user: UserData; onClose: () => vo
   );
 }
 
+// ─── Specialties Modal ────────────────────────────────────────────────────────
+
+function SpecialtiesModal({ user, onClose, onSaved }: { user: UserData; onClose: () => void; onSaved: () => void }) {
+  const current = parseSpecialties(user.specialties || "[]");
+  const [selected, setSelected] = useState<string[]>(current);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = (key: string) => {
+    setSelected(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : prev.length < 5 ? [...prev, key] : prev
+    );
+  };
+
+  const save = async () => {
+    setLoading(true);
+    await fetch(`/api/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ specialties: selected }),
+    });
+    setLoading(false);
+    onSaved();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-bold text-text-primary">Профессии</h2>
+            <p className="text-xs text-text-muted mt-0.5">@{user.username} · максимум 5</p>
+          </div>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {PROFESSIONS.map(p => (
+            <button
+              key={p.key}
+              onClick={() => toggle(p.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium border transition-all ${
+                selected.includes(p.key)
+                  ? `${p.color} border-current`
+                  : "bg-surface-hover text-text-muted border-border hover:text-text-primary"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded border border-border py-2 text-sm text-text-muted hover:text-text-primary transition-colors">Отмена</button>
+          <button onClick={save} disabled={loading} className="flex-1 rounded bg-primary py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50 transition-colors">
+            {loading ? "Сохранение..." : "Сохранить"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function UserManager({ users: initialUsers }: { users: UserData[] }) {
@@ -238,6 +301,7 @@ export function UserManager({ users: initialUsers }: { users: UserData[] }) {
   const [changePassFor, setChangePassFor] = useState<UserData | null>(null);
   const [banFor, setBanFor] = useState<UserData | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [specialtiesFor, setSpecialtiesFor] = useState<UserData | null>(null);
 
   const reload = async () => {
     const res = await fetch("/api/users");
@@ -261,6 +325,7 @@ export function UserManager({ users: initialUsers }: { users: UserData[] }) {
       {showAdd && <AddUserModal onClose={() => setShowAdd(false)} onCreated={reload} />}
       {changePassFor && <ChangePasswordModal user={changePassFor} onClose={() => setChangePassFor(null)} />}
       {banFor && <BanModal user={banFor} onClose={() => setBanFor(null)} onDone={reload} />}
+      {specialtiesFor && <SpecialtiesModal user={specialtiesFor} onClose={() => setSpecialtiesFor(null)} onSaved={reload} />}
 
       {/* Header with Add button */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
@@ -294,8 +359,14 @@ export function UserManager({ users: initialUsers }: { users: UserData[] }) {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center flex-wrap gap-1 mt-0.5">
                     <span className={`rounded px-1.5 py-0.5 text-[10px] ${roleColors[u.role] || "bg-primary/20 text-primary"}`}>{u.role}</span>
+                    {parseSpecialties(u.specialties || "[]").map(key => {
+                      const p = getProfession(key);
+                      return p ? (
+                        <span key={key} className={`rounded px-1.5 py-0.5 text-[10px] ${p.color}`}>{p.label}</span>
+                      ) : null;
+                    })}
                     {passExpiring && (
                       <span className="flex items-center gap-0.5 text-[10px] text-warning">
                         <AlertTriangle className="h-2.5 w-2.5" />
@@ -324,6 +395,12 @@ export function UserManager({ users: initialUsers }: { users: UserData[] }) {
                       className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
                     >
                       <KeyRound className="h-3.5 w-3.5" /> Сменить пароль
+                    </button>
+                    <button
+                      onClick={() => { setSpecialtiesFor(u); setOpenMenu(null); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-colors"
+                    >
+                      <Briefcase className="h-3.5 w-3.5" /> Профессии
                     </button>
                     {u.banned ? (
                       <button

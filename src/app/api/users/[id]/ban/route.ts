@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { sendCriticalAlert } from "@/lib/telegram";
 
 // POST — ban user
 export async function POST(
@@ -38,6 +39,13 @@ export async function POST(
 
   // Invalidate all sessions for the banned user
   await prisma.session.deleteMany({ where: { userId: id } });
+
+  sendCriticalAlert(
+    `Пользователь заблокирован`,
+    `🚫 <b>${target.fullName}</b> (<code>@${target.username}</code>) заблокирован.\n\n` +
+    `👮 Заблокировал: ${session.full_name || session.github_username}\n` +
+    `📝 Причина: ${reason?.trim() || "Нарушение правил"}`
+  ).catch(() => {});
 
   return NextResponse.json({ ok: true });
 }

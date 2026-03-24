@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { sendCriticalAlert } from "@/lib/telegram";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -36,6 +37,14 @@ export async function POST(req: Request) {
       activatedAt: now,
     },
   });
+
+  sendCriticalAlert(
+    `🔴 АВАРИЙНЫЙ РЕЖИМ АКТИВИРОВАН`,
+    `Дашборд заблокирован двумя owner.\n\n` +
+    `🔑 Инициатор: ${lockdown.initiatorName}\n` +
+    `🔑 Подтвердил: ${user.fullName}\n` +
+    (lockdown.reason ? `📝 Причина: ${lockdown.reason}` : "")
+  ).catch(() => {});
 
   return NextResponse.json(updated);
 }

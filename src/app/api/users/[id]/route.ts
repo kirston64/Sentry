@@ -22,6 +22,7 @@ export async function PATCH(
 
     if (body.fullName) updates.fullName = body.fullName.trim();
     if (body.role && session.role === "owner") updates.role = body.role;
+    if (Array.isArray(body.specialties)) updates.specialties = JSON.stringify(body.specialties.slice(0, 5));
 
     if (body.password) {
       if (body.password.length < 6) {

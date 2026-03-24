@@ -21,6 +21,7 @@ model User {
   discord           String?
   telegram          String?
   github            String?
+  specialties       String    @default("[]") // JSON array of specialty keys
   passwordChangedAt DateTime  @default(now())
   lastActiveAt      DateTime?
   banned            Boolean   @default(false)

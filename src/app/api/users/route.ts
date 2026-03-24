@@ -21,6 +21,7 @@ export async function GET() {
         banned: true,
         banReason: true,
         bannedAt: true,
+        specialties: true,
         createdAt: true,
         _count: {
           select: {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { collectViaSSH } from "@/lib/ssh-collect";
+import { sendCriticalAlert } from "@/lib/telegram";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -69,8 +70,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true, metrics });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
-    // Mark server as offline on SSH failure
     const { id } = await params;
+
+    const server = await prisma.server.findUnique({ where: { id }, select: { name: true, ip: true, status: true } }).catch(() => null);
+
+    // Only alert if server was previously online (avoid spam on first connect)
+    if (server?.status === "online") {
+      sendCriticalAlert(
+        `Сервер недоступен: ${server.name}`,
+        `🖥 <b>${server.name}</b> (<code>${server.ip}</code>) не отвечает на SSH-подключение.\n\n❌ Ошибка: <code>${msg}</code>`
+      ).catch(() => {});
+    }
+
     await prisma.server.update({
       where: { id },
       data: { status: "offline", collectError: msg },

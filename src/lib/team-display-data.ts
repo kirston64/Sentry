@@ -1,5 +1,6 @@
 import type { TeamMember } from "@/types/team";
 import type { UserRole } from "@/types/database";
+import { getProfession, parseSpecialties } from "@/lib/professions";
 
 // Display-only data for team members that enriches the basic user info from the API.
 // Keyed by lowercase username for matching with DB users.
@@ -217,6 +218,7 @@ export interface ApiUser {
   lastActiveAt?: string | null;
   banned?: boolean;
   banReason?: string | null;
+  specialties?: string; // JSON string from DB
 }
 
 function computeIsOnline(lastActiveAt?: string | null): boolean {
@@ -229,8 +231,21 @@ export function enrichUsers(apiUsers: ApiUser[]): TeamMember[] {
     const isOnline = computeIsOnline(u.lastActiveAt);
     const lastActiveAt = u.lastActiveAt ?? new Date(0).toISOString();
     const display = displayData[u.username.toLowerCase()];
+    // Parse DB specialties into labels (overrides static data if set)
+    const dbSpecialtyKeys = parseSpecialties(u.specialties || "[]");
+    const dbSpecialtyLabels = dbSpecialtyKeys.map(k => getProfession(k)?.label).filter(Boolean) as string[];
+
     if (display) {
-      return { ...display, id: u.id, bio: u.bio || display.bio, isOnline, lastActiveAt, banned: u.banned, banReason: u.banReason };
+      return {
+        ...display,
+        id: u.id,
+        bio: u.bio || display.bio,
+        isOnline,
+        lastActiveAt,
+        banned: u.banned,
+        banReason: u.banReason,
+        specialties: dbSpecialtyLabels.length > 0 ? dbSpecialtyLabels : display.specialties,
+      };
     }
     return {
       id: u.id,
@@ -243,6 +258,7 @@ export function enrichUsers(apiUsers: ApiUser[]): TeamMember[] {
       lastActiveAt,
       banned: u.banned,
       banReason: u.banReason,
+      specialties: dbSpecialtyLabels,
     };
   });
 }
