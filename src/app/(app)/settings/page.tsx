@@ -21,7 +21,7 @@ export default async function SettingsPage() {
   const isOwner = canManageUsers(profile.role);
 
   const users = await prisma.user.findMany({
-    select: { id: true, username: true, fullName: true, role: true, createdAt: true, passwordChangedAt: true },
+    select: { id: true, username: true, fullName: true, role: true, createdAt: true, passwordChangedAt: true, banned: true },
     orderBy: { createdAt: "asc" },
   });
 
@@ -122,6 +122,7 @@ export default async function SettingsPage() {
             ...u,
             createdAt: u.createdAt.toISOString(),
             passwordChangedAt: u.passwordChangedAt.toISOString(),
+            banned: u.banned,
           }))} />
         </div>
       ) : (
