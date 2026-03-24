@@ -66,7 +66,8 @@ export function LineChart({
       />
 
       {labels && labels.map((label, i) => {
-        const x = padding.left + (i / (data.length - 1)) * chartW;
+        if (!label) return null;
+        const x = padding.left + (i / Math.max(labels.length - 1, 1)) * chartW;
         return (
           <text
             key={i}

@@ -5,6 +5,8 @@ export interface TeamMember {
   username: string;
   fullName: string;
   role: UserRole;
+  banned?: boolean;
+  banReason?: string | null;
   isOnline: boolean;
   lastActiveAt: string;
   specialties: string[];

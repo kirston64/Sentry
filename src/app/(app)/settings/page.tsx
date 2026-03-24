@@ -2,10 +2,13 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { canViewSettings, canManageUsers } from "@/lib/rbac";
 import { AccessDenied } from "@/components/auth/access-denied";
-import { Settings, Users, ShieldAlert } from "lucide-react";
+import { Settings, Users, ShieldAlert, Send, KeyRound, ShieldOff } from "lucide-react";
+import { TelegramSetup } from "@/components/settings/telegram-setup";
+import { OTPManager } from "@/components/settings/otp-manager";
 import { prisma } from "@/lib/db";
 import { DeviceCodesManager } from "@/components/settings/device-codes-manager";
 import { UserManager } from "@/components/settings/user-manager";
+import { LockdownPanel } from "@/components/lockdown/lockdown-panel";
 
 export default async function SettingsPage() {
   const profile = await getSession();
@@ -67,6 +70,46 @@ export default async function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* OTP Generator */}
+      {isOwner && (
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <KeyRound className="h-4 w-4 text-text-muted" />
+            <h2 className="text-sm font-medium text-text-primary">Коды входа (OTP)</h2>
+          </div>
+          <OTPManager users={users.map(u => ({
+            id: u.id,
+            username: u.username,
+            fullName: u.fullName,
+            role: u.role,
+          }))} />
+        </div>
+      )}
+
+      {/* Telegram Bot */}
+      {isOwner && (
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <Send className="h-4 w-4 text-text-muted" />
+            <h2 className="text-sm font-medium text-text-primary">Telegram Bot</h2>
+          </div>
+          <TelegramSetup />
+        </div>
+      )}
+
+      {/* Emergency Lockdown */}
+      {isOwner && (
+        <div className="rounded-lg border border-border bg-surface">
+          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+            <ShieldOff className="h-4 w-4 text-text-muted" />
+            <h2 className="text-sm font-medium text-text-primary">Аварийный режим</h2>
+          </div>
+          <div className="p-5">
+            <LockdownPanel />
+          </div>
+        </div>
+      )}
 
       {/* User management */}
       {isOwner ? (

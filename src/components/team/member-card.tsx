@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { clsx } from "clsx";
-import { GitCommit, CheckSquare, GitPullRequest, MessageCircle, Send } from "lucide-react";
+import { GitCommit, CheckSquare, MessageCircle, Send, Trash2, Ban, ShieldCheck } from "lucide-react";
 import type { TeamMember } from "@/types/team";
 
 const roleColors = {
@@ -21,7 +21,19 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(hours / 24)}д назад`;
 }
 
-export function MemberCard({ member }: { member: TeamMember }) {
+export function MemberCard({
+  member,
+  onDelete,
+  onBan,
+  onUnban,
+  banned,
+}: {
+  member: TeamMember;
+  onDelete?: () => void;
+  onBan?: () => void;
+  onUnban?: () => void;
+  banned?: boolean;
+}) {
   const initials = member.fullName
     .split(" ")
     .map((w) => w[0])
@@ -31,9 +43,50 @@ export function MemberCard({ member }: { member: TeamMember }) {
   return (
     <Link
       href={`/team/${member.id}`}
-      className="rounded-lg border border-border bg-surface p-4 transition-all hover:border-border-focus hover:bg-surface-hover hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20"
+      className={clsx(
+        "group relative block rounded-lg border bg-surface p-4 transition-all hover:bg-surface-hover hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20",
+        banned ? "border-error/30 opacity-75" : "border-border hover:border-border-focus"
+      )}
     >
-      <div className="flex items-start gap-3">
+      {/* Action buttons — shown on hover */}
+      <div className="absolute top-2 right-2 hidden group-hover:flex items-center gap-1">
+        {onUnban && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onUnban(); }}
+            className="flex items-center justify-center h-7 w-7 rounded-md bg-success/10 text-success hover:bg-success/20 transition-colors"
+            title="Разбанить"
+          >
+            <ShieldCheck className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onBan && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onBan(); }}
+            className="flex items-center justify-center h-7 w-7 rounded-md bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
+            title="Заблокировать"
+          >
+            <Ban className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
+            className="flex items-center justify-center h-7 w-7 rounded-md bg-error/10 text-error hover:bg-error/20 transition-colors"
+            title="Удалить пользователя"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Banned badge */}
+      {banned && (
+        <div className="absolute top-2 left-2 flex items-center gap-1 rounded px-1.5 py-0.5 bg-error/15 border border-error/25">
+          <Ban className="h-3 w-3 text-error" />
+          <span className="text-[10px] text-error font-medium">Забанен</span>
+        </div>
+      )}
+      <div className={clsx("flex items-start gap-3", banned && "mt-6")}>
         {/* Avatar */}
         <div className="relative">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 text-sm font-bold text-primary">

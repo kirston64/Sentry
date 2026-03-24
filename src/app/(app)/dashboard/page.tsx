@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { StatCard } from "@/components/ui/stat-card";
 import { ServerStatusWidget } from "@/components/dashboard/server-status-widget";
 import { QuickActions } from "@/components/dashboard/quick-actions";
+import { FailedLoginsAlert } from "@/components/dashboard/failed-logins-alert";
 import { ChartCard } from "@/components/charts/chart-card";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -39,23 +40,19 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/servers").then(r => r.json()),
-      fetch("/api/incidents").then(r => r.json()),
-      fetch("/api/deploys").then(r => r.json()),
-      fetch("/api/audit?limit=5").then(r => r.json()),
-      fetch("/api/users").then(r => r.json()),
-      fetch("/api/uptime?days=7").then(r => r.json()).catch(() => []),
-    ]).then(([servers, incidents, deploys, auditLogs, users, uptime]) => {
-      // Player history from first server's metrics
-      const mainServer = servers[0];
-      const playerHistory = mainServer?.metrics
-        ? Array.from({ length: 24 }, (_, i) => {
-            const hour = new Date();
-            hour.setHours(hour.getHours() - (23 - i));
-            return mainServer.metrics?.playersOnline || 0;
-          })
-        : [];
+    let cancelled = false;
+
+    async function load() {
+      const [servers, incidents, deploys, auditLogs, users, uptime] = await Promise.all([
+        fetch("/api/servers").then(r => r.json()).catch(() => []),
+        fetch("/api/incidents").then(r => r.json()).catch(() => []),
+        fetch("/api/deploys").then(r => r.json()).catch(() => []),
+        fetch("/api/audit?limit=5").then(r => r.json()).catch(() => []),
+        fetch("/api/users").then(r => r.json()).catch(() => []),
+        fetch("/api/uptime?days=7").then(r => r.json()).catch(() => []),
+      ]);
+
+      if (cancelled) return;
 
       // Calculate average uptime from all servers
       const uptimeArr = Array.isArray(uptime) ? uptime : [];
@@ -69,11 +66,24 @@ export default function DashboardPage() {
           const day = new Date(d.startedAt).getDay();
           return (day === 0 ? 6 : day - 1) === i;
         });
-        return { label, value: dayDeploys.length || Math.floor(Math.random() * 15) + 2 };
+        return { label, value: dayDeploys.length || 0 };
       });
 
-      setData({ servers, incidents, deploys, auditLogs, users, playerHistory, uptimePercent: avgUptime, commitActivity });
-    });
+      // Set initial data with empty player history
+      setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
+
+      // Fetch real player history for first server
+      if (servers[0]?.id) {
+        const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r => r.json()).catch(() => null);
+        if (!cancelled && srv?.metrics?.length > 1) {
+          const playerHistory = srv.metrics.map((m: { playersOnline: number }) => m.playersOnline);
+          setData(prev => prev ? { ...prev, playerHistory } : null);
+        }
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   if (!data) {
@@ -96,10 +106,7 @@ export default function DashboardPage() {
   const activeIncidents = data.incidents.filter((i) => i.status !== "resolved");
   const hasProblems = offlineServers.length > 0 || failedDeploys.length > 0 || activeIncidents.length > 0;
 
-  // Use server metrics for player history chart
-  const playerData = data.servers[0]?.metrics
-    ? [12, 8, 5, 3, 4, 6, 14, 28, 45, 62, 71, 78, 82, 76, 68, 72, 80, 91, 105, 118, 124, 112, 87, data.servers[0].metrics.playersOnline]
-    : [];
+  const playerData = data.playerHistory.length > 1 ? data.playerHistory : [];
 
   return (
     <div className="space-y-6">
@@ -107,6 +114,8 @@ export default function DashboardPage() {
         <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
         <span className="text-xs text-text-muted">GTA 5 RP Dev-Ops</span>
       </div>
+
+      <FailedLoginsAlert />
 
       {hasProblems && (
         <div className="rounded-lg border border-error/40 bg-error/10 p-4 animate-alert-pulse">
@@ -151,7 +160,21 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <ChartCard title="Игроки за 24ч">
           <div className="h-32">
-            <LineChart data={playerData} color="#007fd4" labels={HOURS.filter((_, i) => i % 6 === 0)} />
+            {playerData.length > 1 ? (
+              <LineChart
+                data={playerData}
+                color="#007fd4"
+                labels={playerData.map((_, i) =>
+                  i % Math.max(1, Math.floor(playerData.length / 6)) === 0
+                    ? HOURS[Math.round((i / playerData.length) * 23)]
+                    : ""
+                )}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-text-muted">
+                Нет данных
+              </div>
+            )}
           </div>
         </ChartCard>
         <ChartCard title="Коммиты за неделю">

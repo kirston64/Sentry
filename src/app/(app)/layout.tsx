@@ -4,6 +4,10 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ProfileProvider } from "@/components/auth/profile-context";
+import { LockdownBanner } from "@/components/lockdown/lockdown-banner";
+import { PresenceTracker } from "@/components/auth/presence-tracker";
+import { BanChecker } from "@/components/auth/ban-checker";
+import { prisma } from "@/lib/db";
 
 export default async function AppLayout({
   children,
@@ -12,6 +16,25 @@ export default async function AppLayout({
 }) {
   const profile = await getSession();
   if (!profile) redirect("/");
+
+  // Check if user is banned
+  const userRecord = await prisma.user.findUnique({
+    where: { id: profile.id },
+    select: { banned: true },
+  }).catch(() => null);
+  if (userRecord?.banned && profile.role !== "owner") {
+    redirect("/banned");
+  }
+
+  // Check lockdown — non-owners get blocked
+  const lockdown = await prisma.systemLockdown.findFirst({
+    where: { status: { in: ["active", "pending"] } },
+    orderBy: { initiatedAt: "desc" },
+  }).catch(() => null);
+
+  if (lockdown?.status === "active" && profile.role !== "owner") {
+    redirect("/lockdown");
+  }
 
   return (
     <ProfileProvider profile={profile}>
@@ -23,9 +46,15 @@ export default async function AppLayout({
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Mobile header */}
           <MobileHeader profile={profile} />
+          {/* Lockdown banner for owners */}
+          {profile.role === "owner" && lockdown && (
+            <LockdownBanner lockdown={lockdown} userId={profile.id} />
+          )}
           <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
         </div>
         <CommandPalette />
+        <PresenceTracker />
+        {profile.role !== "owner" && <BanChecker />}
       </div>
     </ProfileProvider>
   );

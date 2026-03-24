@@ -11,8 +11,10 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname === "/";
   const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
   const isStatusPage = request.nextUrl.pathname === "/status";
+  const isLockdownPage = request.nextUrl.pathname === "/lockdown";
+  const isBannedPage = request.nextUrl.pathname === "/banned";
 
-  if (isApiRoute || isStatusPage) return NextResponse.next();
+  if (isApiRoute || isStatusPage || isLockdownPage || isBannedPage) return NextResponse.next();
 
   let validSession = false;
   if (token) {

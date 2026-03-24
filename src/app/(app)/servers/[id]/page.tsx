@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { ServerStatusDot } from "@/components/servers/server-status-dot";
 import { GaugeBar } from "@/components/servers/gauge-bar";
-import { LineChart } from "@/components/charts/line-chart";
+import { MetricsCharts } from "@/components/servers/metrics-charts";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { useProfile } from "@/components/auth/profile-context";
 import { hasRole } from "@/lib/rbac";
@@ -112,12 +112,6 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
 
   const metrics = server.currentMetrics || { playersOnline: 0, cpuPercent: 0, ramPercent: 0, uptimeSeconds: 0, tickRate: 0 };
   const isOnline = server.status === "online";
-  const playerHistory = server.metrics.map((m) => m.playersOnline);
-  const hours = server.metrics.map((m) => {
-    if (!m.createdAt) return "";
-    const d = new Date(m.createdAt);
-    return `${d.getHours()}:00`;
-  }).filter((_, i) => i % 4 === 0);
 
   const addRestart = async () => {
     if (!newCron.trim()) return;
@@ -232,15 +226,6 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
-          {/* Player chart */}
-          {playerHistory.length > 0 && (
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <h3 className="mb-3 text-xs font-medium text-text-primary">Игроки за 24 часа</h3>
-              <div className="h-40">
-                <LineChart data={playerHistory} color="#007fd4" labels={hours} />
-              </div>
-            </div>
-          )}
         </>
       ) : (
         <div className="rounded-lg border border-error/40 bg-error/10 p-8 text-center">
@@ -249,6 +234,9 @@ export default function ServerDetailPage({ params }: { params: Promise<{ id: str
           <p className="text-xs text-text-muted mt-1">Последние данные недоступны</p>
         </div>
       )}
+
+      {/* Metrics charts */}
+      <MetricsCharts serverId={id} />
 
       {/* Scheduled Restarts */}
       <div className="rounded-lg border border-border bg-surface">

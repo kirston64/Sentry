@@ -75,15 +75,13 @@ export function LoginForm() {
 
       const data = await res.json();
 
-      if (res.ok) {
+      if (res.status === 200 && res.ok) {
         router.push("/dashboard");
         router.refresh();
         return;
-      }
-
-      if (res.status === 202 && data.requireOTP) {
+      } else if (res.status === 202 && data.requireOTP) {
         setStep("otp");
-        setDeviceLabel(data.deviceLabel);
+        setDeviceLabel(data.hasTelegram ? "Telegram" : "администратору");
         setInfo(data.message);
       } else if (res.status === 403 && data.passwordExpired) {
         setStep("change-password");
@@ -161,10 +159,10 @@ export function LoginForm() {
         <>
           <div className="rounded-md border border-border bg-surface/50 p-3">
             <p className="text-xs text-text-muted">
-              Обнаружен вход с нового устройства: <span className="text-accent">{deviceLabel}</span>
+              Код отправлен в <span className="text-primary font-medium">{deviceLabel}</span>
             </p>
             <p className="mt-1 text-xs text-text-muted">
-              Запросите код у администратора и введите его ниже.
+              Введите 6-значный код. Он действует <span className="text-text-primary">5 минут</span>.
             </p>
           </div>
 

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { AlertTriangle, Plus, Filter } from "lucide-react";
+import { AlertTriangle, Plus, Filter, FileDown } from "lucide-react";
 import { IncidentCard } from "@/components/incidents/incident-card";
 import { CreateIncidentModal } from "@/components/incidents/create-incident-modal";
+import { downloadCSV, downloadJSON } from "@/lib/export";
 import type { Severity } from "@/types/incident";
 
 interface IncidentData {
@@ -66,13 +67,47 @@ export default function IncidentsPage() {
             {incidents.filter((i) => i.status !== "resolved").length} active
           </span>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-1.5 rounded-md bg-error px-3 py-2 text-xs font-medium text-white hover:bg-error/80"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Report Incident
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() =>
+              downloadCSV(
+                filtered.map((inc) => ({
+                  id: inc.id,
+                  title: inc.title,
+                  severity: inc.severity,
+                  status: inc.status,
+                  creator: inc.creator.fullName || inc.creator.username,
+                  assignee: inc.assignee ? inc.assignee.fullName || inc.assignee.username : "",
+                  createdAt: inc.createdAt,
+                  resolvedAt: inc.resolvedAt ?? "",
+                })),
+                `incidents-${new Date().toISOString().slice(0, 10)}`
+              )
+            }
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+            title="Экспорт CSV"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() =>
+              downloadJSON(filtered, `incidents-${new Date().toISOString().slice(0, 10)}`)
+            }
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+            title="Экспорт JSON"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            JSON
+          </button>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-md bg-error px-3 py-2 text-xs font-medium text-white hover:bg-error/80"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Report Incident
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">

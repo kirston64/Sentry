@@ -214,13 +214,23 @@ export interface ApiUser {
   fullName: string;
   role: UserRole;
   bio?: string;
+  lastActiveAt?: string | null;
+  banned?: boolean;
+  banReason?: string | null;
+}
+
+function computeIsOnline(lastActiveAt?: string | null): boolean {
+  if (!lastActiveAt) return false;
+  return Date.now() - new Date(lastActiveAt).getTime() < 5 * 60 * 1000; // 5 min
 }
 
 export function enrichUsers(apiUsers: ApiUser[]): TeamMember[] {
   return apiUsers.map((u) => {
+    const isOnline = computeIsOnline(u.lastActiveAt);
+    const lastActiveAt = u.lastActiveAt ?? new Date(0).toISOString();
     const display = displayData[u.username.toLowerCase()];
     if (display) {
-      return { ...display, id: u.id, bio: u.bio || display.bio };
+      return { ...display, id: u.id, bio: u.bio || display.bio, isOnline, lastActiveAt, banned: u.banned, banReason: u.banReason };
     }
     return {
       id: u.id,
@@ -229,6 +239,10 @@ export function enrichUsers(apiUsers: ApiUser[]): TeamMember[] {
       role: u.role,
       ...defaultDisplay,
       bio: u.bio || "",
+      isOnline,
+      lastActiveAt,
+      banned: u.banned,
+      banReason: u.banReason,
     };
   });
 }

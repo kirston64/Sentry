@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_ORG = process.env.GITHUB_ORG;
+const GITHUB_USER = process.env.GITHUB_USER;
 
 interface GHRepo {
   name: string;
@@ -48,8 +49,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // If no token/org configured, return demo data
-  if (!GITHUB_TOKEN || !GITHUB_ORG) {
+  // If no token configured, return demo data
+  if (!GITHUB_TOKEN || (!GITHUB_ORG && !GITHUB_USER)) {
     return NextResponse.json({
       configured: false,
       repos: getDemoRepos(),
@@ -57,9 +58,11 @@ export async function GET() {
   }
 
   try {
-    const repos: GHRepo[] = await ghFetch(
-      `https://api.github.com/orgs/${GITHUB_ORG}/repos?sort=updated&per_page=10`
-    );
+    const endpoint = GITHUB_ORG
+      ? `https://api.github.com/orgs/${GITHUB_ORG}/repos?sort=updated&per_page=10`
+      : `https://api.github.com/users/${GITHUB_USER}/repos?sort=updated&per_page=10&type=owner`;
+
+    const repos: GHRepo[] = await ghFetch(endpoint);
 
     const reposWithDetails = await Promise.all(
       repos.slice(0, 6).map(async (repo) => {

@@ -21,11 +21,19 @@ model User {
   discord           String?
   telegram          String?
   github            String?
-  passwordChangedAt DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  passwordChangedAt DateTime  @default(now())
+  lastActiveAt      DateTime?
+  banned            Boolean   @default(false)
+  banReason         String?
+  bannedAt          DateTime?
+  bannedBy          String?   // userId of owner who banned
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  telegramChatId   String?
 
   sessions         Session[]
+  loginOTPs        LoginOTP[]
   trustedDevices   TrustedDevice[]
   deviceLoginCodes DeviceLoginCode[]
   notifications    Notification[]
@@ -78,6 +86,30 @@ model DeviceLoginCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// ============ FAILED LOGINS ============
+
+model FailedLogin {
+  id        String   @id @default(cuid())
+  username  String
+  ip        String
+  userAgent String?
+  reason    String   // wrong_password, wrong_otp, rate_limit
+  createdAt DateTime @default(now())
+}
+
+// ============ LOGIN OTP ============
+
+model LoginOTP {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 // ============ NOTIFICATIONS ============
 
 model Notification {
@@ -104,6 +136,12 @@ model Server {
   status     String   @default("offline") // online, offline, restarting
   gameMode   String   @default("Roleplay")
   mapName    String   @default("Los Santos")
+  type       String   @default("game") // game, linux
+  apiKey     String   @unique
+  sshUser    String?
+  sshPassword String? // AES-256 encrypted
+  lastSeenAt DateTime?
+  collectError String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -120,9 +158,12 @@ model ServerMetrics {
   playersOnline Int      @default(0)
   cpuPercent    Float    @default(0)
   ramPercent    Float    @default(0)
+  diskPercent   Float    @default(0)
   uptimeSeconds Int      @default(0)
   tickRate      Int      @default(64)
-  createdAt     DateTime @default(now())
+  activeUsers     Int      @default(0)
+  connectedUsers  String   @default("[]") // JSON: [{user,ip,since}]
+  createdAt       DateTime @default(now())
 
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 }
@@ -290,4 +331,22 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// ============ SYSTEM LOCKDOWN ============
+
+model SystemLockdown {
+  id              String    @id @default(cuid())
+  status          String    // pending | active | inactive
+  reason          String?
+  initiatedBy     String    // userId
+  initiatorName   String    // fullName snapshot
+  initiatedAt     DateTime  @default(now())
+  confirmedBy     String?   // userId of second owner
+  confirmerName   String?
+  confirmedAt     DateTime?
+  activatedAt     DateTime?
+  deactivatedBy   String?
+  deactivaterName String?
+  deactivatedAt   DateTime?
 }
