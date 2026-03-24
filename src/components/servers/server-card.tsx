@@ -3,8 +3,17 @@
 import Link from "next/link";
 import { ServerStatusDot } from "./server-status-dot";
 import { GaugeBar } from "./gauge-bar";
-import { Users, Clock, Terminal, AlertCircle, Loader2 } from "lucide-react";
+import { Users, Clock, Terminal, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import type { Server, ServerMetrics } from "@/types/server";
+
+function formatLastSeen(dateStr: string | null | undefined): string | null {
+  if (!dateStr) return null;
+  const sec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (sec < 60) return `${sec}с назад`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}м назад`;
+  return `${Math.floor(min / 60)}ч назад`;
+}
 
 function formatUptime(seconds: number) {
   const d = Math.floor(seconds / 86400);
@@ -33,6 +42,7 @@ export function ServerCard({ server, baseMetrics }: ServerCardProps) {
   const isLinux = server.type === "linux";
   const isConnecting = !isOnline && server.hasSSH && !server.collectError && !server.lastSeenAt;
   const metrics = baseMetrics;
+  const lastSeen = formatLastSeen(server.lastSeenAt);
 
   return (
     <Link
@@ -88,6 +98,15 @@ export function ServerCard({ server, baseMetrics }: ServerCardProps) {
             <div className="border-t border-border px-4 py-2 flex justify-between text-[10px] text-text-muted">
               <span>Tick: {metrics.tickRate}</span>
               <span>{(server as unknown as { mapName: string }).mapName || ""}</span>
+            </div>
+          )}
+
+          {/* Connected SSH sessions */}
+          {/* Last seen */}
+          {lastSeen && (
+            <div className="border-t border-border px-4 py-1.5 flex items-center gap-1 text-[10px] text-text-muted">
+              <RefreshCw className="h-2.5 w-2.5" />
+              Сбор: {lastSeen}
             </div>
           )}
 

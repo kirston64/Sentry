@@ -5,9 +5,10 @@ import { encryptPassword } from "@/lib/ssh-collect";
 import crypto from "crypto";
 
 function deriveStatus(status: string, lastSeenAt: Date | null): string {
+  // Only override to offline if server has never been seen or data is very stale (>15 min)
   if (!lastSeenAt) return "offline";
   const staleSec = (Date.now() - new Date(lastSeenAt).getTime()) / 1000;
-  if (staleSec > 120) return "offline";
+  if (staleSec > 900) return "offline";
   return status;
 }
 
