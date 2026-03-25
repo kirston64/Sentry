@@ -16,6 +16,7 @@ interface ServerData extends Server {
 
 export default function ServersPage() {
   const [servers, setServers] = useState<ServerData[]>([]);
+  const [uptimeMap, setUptimeMap] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
 
@@ -35,8 +36,16 @@ export default function ServersPage() {
   }, []);
 
   const fetchServers = useCallback(async () => {
-    const data = await fetch("/api/servers").then((r) => r.json());
+    const [data, uptimeData] = await Promise.all([
+      fetch("/api/servers").then((r) => r.json()),
+      fetch("/api/uptime?days=30").then((r) => r.json()).catch(() => []),
+    ]);
     setServers(data);
+    const map: Record<string, number> = {};
+    if (Array.isArray(uptimeData)) {
+      for (const u of uptimeData) map[u.serverId] = u.uptimePercent;
+    }
+    setUptimeMap(map);
     setLoading(false);
     triggerCollect(data);
   }, [triggerCollect]);
@@ -98,7 +107,7 @@ export default function ServersPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             {servers.map((server) => (
-              <ServerCard key={server.id} server={server} baseMetrics={server.metrics} />
+              <ServerCard key={server.id} server={server} baseMetrics={server.metrics} uptimePercent={uptimeMap[server.id]} />
             ))}
           </div>
         )}

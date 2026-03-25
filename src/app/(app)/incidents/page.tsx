@@ -25,6 +25,8 @@ export default function IncidentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "resolved">("all");
   const [severityFilter, setSeverityFilter] = useState<Severity | "all">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const fetchIncidents = useCallback(async () => {
     const res = await fetch("/api/incidents");
@@ -39,9 +41,11 @@ export default function IncidentsPage() {
       if (statusFilter === "active" && inc.status === "resolved") return false;
       if (statusFilter === "resolved" && inc.status !== "resolved") return false;
       if (severityFilter !== "all" && inc.severity !== severityFilter) return false;
+      if (dateFrom && new Date(inc.createdAt) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(inc.createdAt) > new Date(dateTo + "T23:59:59")) return false;
       return true;
     });
-  }, [incidents, statusFilter, severityFilter]);
+  }, [incidents, statusFilter, severityFilter, dateFrom, dateTo]);
 
   const handleCreated = () => {
     setModalOpen(false);
@@ -138,9 +142,24 @@ export default function IncidentsPage() {
           <option value="P3">P3 Medium</option>
           <option value="P4">P4 Low</option>
         </select>
-        {(statusFilter !== "all" || severityFilter !== "all") && (
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+          title="С даты"
+        />
+        <span className="text-xs text-text-muted">—</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+          title="По дату"
+        />
+        {(statusFilter !== "all" || severityFilter !== "all" || dateFrom || dateTo) && (
           <button
-            onClick={() => { setStatusFilter("all"); setSeverityFilter("all"); }}
+            onClick={() => { setStatusFilter("all"); setSeverityFilter("all"); setDateFrom(""); setDateTo(""); }}
             className="text-[10px] text-primary hover:underline"
           >
             Сбросить

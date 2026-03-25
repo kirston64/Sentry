@@ -35,9 +35,10 @@ interface ExtendedMetrics extends ServerMetrics {
 interface ServerCardProps {
   server: Server & { type?: string; collectError?: string | null; hasSSH?: boolean; lastSeenAt?: string | null };
   baseMetrics: ExtendedMetrics;
+  uptimePercent?: number;
 }
 
-export function ServerCard({ server, baseMetrics }: ServerCardProps) {
+export function ServerCard({ server, baseMetrics, uptimePercent }: ServerCardProps) {
   const isOnline = server.status === "online";
   const isLinux = server.type === "linux";
   const isConnecting = !isOnline && server.hasSSH && !server.collectError && !server.lastSeenAt;
@@ -103,12 +104,19 @@ export function ServerCard({ server, baseMetrics }: ServerCardProps) {
 
           {/* Connected SSH sessions */}
           {/* Last seen */}
-          {lastSeen && (
-            <div className="border-t border-border px-4 py-1.5 flex items-center gap-1 text-[10px] text-text-muted">
-              <RefreshCw className="h-2.5 w-2.5" />
-              Сбор: {lastSeen}
-            </div>
-          )}
+          <div className="border-t border-border px-4 py-1.5 flex items-center justify-between text-[10px] text-text-muted">
+            {lastSeen ? (
+              <span className="flex items-center gap-1">
+                <RefreshCw className="h-2.5 w-2.5" />
+                Сбор: {lastSeen}
+              </span>
+            ) : <span />}
+            {uptimePercent !== undefined && (
+              <span className={`font-medium ${uptimePercent >= 99 ? "text-success" : uptimePercent >= 95 ? "text-warning" : "text-error"}`}>
+                {uptimePercent}% uptime
+              </span>
+            )}
+          </div>
 
           {/* Connected SSH sessions */}
           {isLinux && metrics.connectedUsers && metrics.connectedUsers.length > 0 && (

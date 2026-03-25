@@ -13,6 +13,8 @@ export default function TasksPage() {
   const [taskCounts, setTaskCounts] = useState({ total: 0, active: 0 });
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     fetch("/api/users").then(r => r.json()).then((data) => {
@@ -83,9 +85,24 @@ export default function TasksPage() {
             <option key={m.id} value={m.id}>{m.username}</option>
           ))}
         </select>
-        {(priorityFilter !== "all" || assigneeFilter !== "all") && (
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+          title="С даты"
+        />
+        <span className="text-xs text-text-muted">—</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+          title="По дату"
+        />
+        {(priorityFilter !== "all" || assigneeFilter !== "all" || dateFrom || dateTo) && (
           <button
-            onClick={() => { setPriorityFilter("all"); setAssigneeFilter("all"); }}
+            onClick={() => { setPriorityFilter("all"); setAssigneeFilter("all"); setDateFrom(""); setDateTo(""); }}
             className="text-[10px] text-primary hover:underline"
           >
             Сбросить
@@ -93,7 +110,7 @@ export default function TasksPage() {
         )}
       </div>
 
-      <KanbanBoard priorityFilter={priorityFilter} assigneeFilter={assigneeFilter} />
+      <KanbanBoard priorityFilter={priorityFilter} assigneeFilter={assigneeFilter} dateFrom={dateFrom} dateTo={dateTo} />
     </div>
   );
 }

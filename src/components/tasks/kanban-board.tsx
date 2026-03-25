@@ -11,9 +11,11 @@ const COLUMNS: TaskStatus[] = ["todo", "in_progress", "done"];
 interface KanbanBoardProps {
   priorityFilter?: TaskPriority | "all";
   assigneeFilter?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
-export function KanbanBoard({ priorityFilter = "all", assigneeFilter = "all" }: KanbanBoardProps) {
+export function KanbanBoard({ priorityFilter = "all", assigneeFilter = "all", dateFrom = "", dateTo = "" }: KanbanBoardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -30,9 +32,11 @@ export function KanbanBoard({ priorityFilter = "all", assigneeFilter = "all" }: 
       if (priorityFilter !== "all" && t.priority !== priorityFilter) return false;
       if (assigneeFilter === "unassigned" && t.assigneeId !== null) return false;
       if (assigneeFilter !== "all" && assigneeFilter !== "unassigned" && t.assigneeId !== assigneeFilter) return false;
+      if (dateFrom && new Date(t.createdAt) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(t.createdAt) > new Date(dateTo + "T23:59:59")) return false;
       return true;
     });
-  }, [tasks, priorityFilter, assigneeFilter]);
+  }, [tasks, priorityFilter, assigneeFilter, dateFrom, dateTo]);
 
   const handleDragStart = useCallback((e: React.DragEvent, taskId: string) => {
     draggedId.current = taskId;
