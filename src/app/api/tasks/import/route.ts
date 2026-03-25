@@ -44,7 +44,7 @@ Answer (JSON array only):`;
       "X-Title": "Sentry Dashboard",
     },
     body: JSON.stringify({
-      model: "meta-llama/llama-3.1-8b-instruct:free",
+      model: "stepfun/step-3.5-flash:free",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
       max_tokens: 1024,
