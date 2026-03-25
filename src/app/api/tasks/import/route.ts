@@ -1,10 +1,25 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 
-interface ParsedTask {
-  title: string;
-  description: string;
-  priority: "critical" | "high" | "medium" | "low";
+type Priority = "critical" | "high" | "medium" | "low";
+
+const CRITICAL = /срочно|критич|asap|горит|блокир|urgent|critical|немедленно|прямо сейчас/i;
+const HIGH     = /важно|высокий|приоритет|быстро|скоро|important|high|надо|нужно/i;
+const LOW      = /потом|не срочно|когда.нибудь|позже|low|можно подождать|при случае|когда будет время/i;
+
+function detectPriority(line: string): Priority {
+  if (CRITICAL.test(line)) return "critical";
+  if (HIGH.test(line))     return "high";
+  if (LOW.test(line))      return "low";
+  return "medium";
+}
+
+function cleanTitle(line: string): string {
+  return line
+    .replace(/^[-*•>\d]+[.)]\s*/, "")   // strip list markers: -, *, 1., 2)
+    .replace(/\(.*?\)/g, "")             // strip parenthetical notes like (низкий приоритет)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export async function POST(request: Request) {
@@ -14,55 +29,16 @@ export async function POST(request: Request) {
   const { text } = await request.json();
   if (!text?.trim()) return NextResponse.json({ error: "Текст не передан" }, { status: 400 });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY не настроен" }, { status: 500 });
+  const lines = text
+    .split(/\n+/)
+    .map((l: string) => l.trim())
+    .filter((l: string) => l.length > 2);
 
-  const prompt = `Ты помощник DevOps команды. Разбери следующий текст и извлеки из него задачи.
-Верни ТОЛЬКО JSON массив без лишнего текста, без markdown, без \`\`\`.
+  const tasks = lines.map((line: string) => ({
+    title: cleanTitle(line).slice(0, 120) || line.slice(0, 120),
+    description: "",
+    priority: detectPriority(line),
+  })).filter((t: { title: string }) => t.title.length > 0);
 
-Для каждой задачи определи:
-- title: краткое название (до 80 символов)
-- description: подробности если есть, иначе пустая строка
-- priority: одно из "critical", "high", "medium", "low"
-  - critical: срочно, критично, asap, горит, блокирует
-  - high: важно, приоритет, быстро
-  - low: потом, не срочно, когда будет время
-  - medium: всё остальное
-
-Текст:
-${text}
-
-Ответ (только JSON массив):`;
-
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const err = await res.json();
-      return NextResponse.json({ error: err.error?.message || "Ошибка Gemini" }, { status: 500 });
-    }
-
-    const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-    // Strip possible markdown code blocks
-    const cleaned = raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-    const tasks: ParsedTask[] = JSON.parse(cleaned);
-
-    if (!Array.isArray(tasks)) throw new Error("Не массив");
-
-    return NextResponse.json({ tasks });
-  } catch {
-    return NextResponse.json({ error: "Не удалось разобрать ответ от Gemini" }, { status: 500 });
-  }
+  return NextResponse.json({ tasks });
 }
