@@ -19,7 +19,7 @@ export function BanChecker() {
       }
     };
 
-    // Check every 30 seconds
+    check();
     const interval = setInterval(check, 30_000);
     return () => clearInterval(interval);
   }, []);

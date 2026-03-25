@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { sendCriticalAlert } from "@/lib/telegram";
 
 export async function GET() {
   try {
@@ -51,10 +52,22 @@ export async function POST(request: Request) {
       },
     });
 
-    // Create audit log
     await prisma.auditLog.create({
       data: { userId: profile.id, action: "incident.create", target: title, details: severity },
     });
+
+    // Alert for critical incidents
+    if (severity === "P1" || severity === "P2") {
+      const severityEmoji = severity === "P1" ? "🔴" : "🟠";
+      sendCriticalAlert(
+        `${severityEmoji} Инцидент ${severity}: ${title}`,
+        `Создан инцидент высокой важности.\n\n` +
+        `📋 <b>${title}</b>\n` +
+        `🏷 Серьёзность: <b>${severity}</b>\n` +
+        `👤 Создал: ${incident.creator.fullName}` +
+        (incident.assignee ? `\n👷 Назначен: ${incident.assignee.fullName}` : "")
+      ).catch(() => {});
+    }
 
     return NextResponse.json(incident, { status: 201 });
   } catch {

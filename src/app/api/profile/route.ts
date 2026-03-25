@@ -31,6 +31,7 @@ export async function GET() {
       avatar: user.avatar,
       passwordChangedAt: user.passwordChangedAt.toISOString(),
       createdAt: user.createdAt.toISOString(),
+      specialties: user.specialties,
       sessions: user.sessions,
       trustedDevices: user.trustedDevices,
     });
@@ -46,6 +47,15 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     const allowed = ["fullName", "bio", "timezone", "discord", "telegram", "github"];
+
+    // Handle specialties separately (array → JSON)
+    if (Array.isArray(body.specialties)) {
+      await prisma.user.update({
+        where: { id: profile.id },
+        data: { specialties: JSON.stringify(body.specialties.slice(0, 5)) },
+      });
+      if (Object.keys(body).length === 1) return NextResponse.json({ ok: true });
+    }
     const updateData: Record<string, string> = {};
 
     for (const key of allowed) {

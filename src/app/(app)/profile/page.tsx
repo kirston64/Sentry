@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useProfile } from "@/components/auth/profile-context";
 import {
   User, Lock, Shield, Monitor, Clock, Save, AlertTriangle,
-  MessageSquare, Globe, KeyRound, Trash2, CheckCircle
+  MessageSquare, Globe, KeyRound, Trash2, CheckCircle, Briefcase
 } from "lucide-react";
+import { PROFESSIONS, parseSpecialties } from "@/lib/professions";
 
 interface ProfileData {
   id: string;
@@ -37,6 +38,7 @@ export default function ProfilePage() {
   const [discord, setDiscord] = useState("");
   const [telegram, setTelegram] = useState("");
   const [github, setGithub] = useState("");
+  const [specialties, setSpecialties] = useState<string[]>([]);
 
   // Password change
   const [oldPassword, setOldPassword] = useState("");
@@ -54,6 +56,7 @@ export default function ProfilePage() {
       setDiscord(d.discord || "");
       setTelegram(d.telegram || "");
       setGithub(d.github || "");
+      setSpecialties(parseSpecialties(d.specialties || "[]"));
     }
     setLoading(false);
   }, []);
@@ -70,7 +73,7 @@ export default function ProfilePage() {
     const res = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName, bio, timezone, discord, telegram, github }),
+      body: JSON.stringify({ fullName, bio, timezone, discord, telegram, github, specialties }),
     });
     if (res.ok) {
       showMessage("success", "Профиль обновлён");
@@ -227,6 +230,37 @@ export default function ProfilePage() {
             </label>
             <input value={github} onChange={(e) => setGithub(e.target.value)} placeholder="username"
               className="w-full rounded-md border border-border bg-bg py-2 px-3 text-sm text-text-primary placeholder-text-muted outline-none focus:border-border-focus" />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-2 flex items-center gap-1 text-xs text-text-muted">
+            <Briefcase className="h-3 w-3" /> Специализации (до 5)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {PROFESSIONS.map((p) => {
+              const selected = specialties.includes(p.key);
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => {
+                    if (selected) {
+                      setSpecialties(specialties.filter((s) => s !== p.key));
+                    } else if (specialties.length < 5) {
+                      setSpecialties([...specialties, p.key]);
+                    }
+                  }}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    selected
+                      ? "border-primary bg-primary/20 text-primary"
+                      : "border-border bg-bg text-text-muted hover:border-primary/50 hover:text-text-primary"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
