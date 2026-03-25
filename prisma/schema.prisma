@@ -46,6 +46,7 @@ model User {
   auditLogs        AuditLog[]
   incidentEvents   IncidentEvent[]
   wikiArticles     WikiArticle[]   @relation("WikiAuthor")
+  aiChats          AIChat[]
 }
 
 model Session {
@@ -332,6 +333,31 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// ============ AI CHATS ============
+
+model AIChat {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  model     String   @default("nvidia/nemotron-3-super-120b-a12b:free")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AIChatMessage[]
+}
+
+model AIChatMessage {
+  id        String   @id @default(cuid())
+  chatId    String
+  role      String
+  content   String
+  reasoning String?
+  createdAt DateTime @default(now())
+
+  chat AIChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 }
 
 // ============ SYSTEM LOCKDOWN ============

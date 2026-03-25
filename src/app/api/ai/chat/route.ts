@@ -1,17 +1,38 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
-  const { messages } = await request.json();
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json({ error: "Сообщения не переданы" }, { status: 400 });
-  }
+  const { chatId, message, model } = await request.json();
+  if (!chatId || !message) return NextResponse.json({ error: "chatId и message обязательны" }, { status: 400 });
 
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "OPENROUTER_API_KEY не настроен" }, { status: 500 });
+
+  // Load chat history
+  const chat = await prisma.aIChat.findFirst({
+    where: { id: chatId, userId: session.id },
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
+  if (!chat) return NextResponse.json({ error: "Чат не найден" }, { status: 404 });
+
+  // Save user message
+  await prisma.aIChatMessage.create({ data: { chatId, role: "user", content: message } });
+
+  // Update chat title from first message
+  if (chat.messages.length === 0) {
+    const title = message.slice(0, 60) + (message.length > 60 ? "..." : "");
+    await prisma.aIChat.update({ where: { id: chatId }, data: { title } });
+  }
+
+  const selectedModel = model || chat.model;
+
+  // Build messages history
+  const history = chat.messages.map((m) => ({ role: m.role, content: m.content }));
+  history.push({ role: "user", content: message });
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     signal: AbortSignal.timeout(60_000),
@@ -19,18 +40,10 @@ export async function POST(request: Request) {
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://sentry-dashboard.local",
-      "X-Title": "Sentry Dashboard",
     },
     body: JSON.stringify({
-      model: "nvidia/nemotron-3-super-120b-a12b:free",
-      messages: [
-        {
-          role: "system",
-          content: "Ты AI-ассистент DevOps команды разрабатывающей GTA V RP сервер на RAGE:MP + Node.js + TypeScript. Отвечай чётко и по делу. Можешь помогать с архитектурой, кодом, планированием задач и техническими вопросами.",
-        },
-        ...messages,
-      ],
+      model: selectedModel,
+      messages: history,
       temperature: 0.7,
       max_tokens: 4096,
     }),
@@ -42,9 +55,13 @@ export async function POST(request: Request) {
   }
 
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content
-    || data.choices?.[0]?.message?.reasoning
-    || "";
+  const msg = data.choices?.[0]?.message ?? {};
+  const content: string = msg.content || "";
+  const reasoning: string = msg.reasoning || msg.reasoning_content || "";
 
-  return NextResponse.json({ content });
+  // Save assistant message
+  await prisma.aIChatMessage.create({ data: { chatId, role: "assistant", content, reasoning: reasoning || null } });
+  await prisma.aIChat.update({ where: { id: chatId }, data: { updatedAt: new Date(), model: selectedModel } });
+
+  return NextResponse.json({ content, reasoning });
 }
