@@ -45,7 +45,10 @@ Answer (JSON array only):`;
     },
     body: JSON.stringify({
       model: "stepfun/step-3.5-flash:free",
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: "You are a JSON-only API. You must respond with a valid JSON array and nothing else. No markdown, no explanations, no code blocks." },
+        { role: "user", content: prompt },
+      ],
       temperature: 0.1,
       max_tokens: 1024,
     }),
@@ -60,11 +63,14 @@ Answer (JSON array only):`;
   const raw = data.choices?.[0]?.message?.content ?? "";
 
   try {
-    const cleaned = raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-    const tasks: ParsedTask[] = JSON.parse(cleaned);
+    // Try to extract JSON array from anywhere in the response
+    const match = raw.match(/\[[\s\S]*\]/);
+    const jsonStr = match ? match[0] : raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+    const tasks: ParsedTask[] = JSON.parse(jsonStr);
     if (!Array.isArray(tasks)) throw new Error();
     return NextResponse.json({ tasks });
   } catch {
-    return NextResponse.json({ error: "Не удалось разобрать ответ модели", raw }, { status: 500 });
+    // Last resort: return raw so user sees what model said
+    return NextResponse.json({ error: `Модель вернула неожиданный ответ: ${raw.slice(0, 200)}` }, { status: 500 });
   }
 }
