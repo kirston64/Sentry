@@ -18,8 +18,10 @@ interface ProfileData {
   discord: string | null;
   telegram: string | null;
   github: string | null;
+  avatar: string | null;
   passwordChangedAt: string;
   createdAt: string;
+  specialties: string;
   sessions: { id: string; userAgent: string | null; ip: string | null; createdAt: string }[];
   trustedDevices: { id: string; label: string | null; lastUsedAt: string; createdAt: string }[];
 }
