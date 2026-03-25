@@ -35,6 +35,7 @@ ${text}
 Answer (JSON array only):`;
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    signal: AbortSignal.timeout(20_000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -43,7 +44,7 @@ Answer (JSON array only):`;
       "X-Title": "Sentry Dashboard",
     },
     body: JSON.stringify({
-      model: "nvidia/nemotron-3-super-120b-a12b:free",
+      model: "meta-llama/llama-3.1-8b-instruct:free",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
       max_tokens: 1024,
