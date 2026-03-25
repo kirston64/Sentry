@@ -60,7 +60,8 @@ Answer (JSON array only):`;
   }
 
   const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content ?? "";
+  const msg = data.choices?.[0]?.message ?? {};
+  const raw: string = msg.content || msg.reasoning || msg.reasoning_content || "";
 
   try {
     // Try to extract JSON array from anywhere in the response
