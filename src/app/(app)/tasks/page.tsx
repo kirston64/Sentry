@@ -102,6 +102,7 @@ export default function TasksPage() {
               className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
               title="По дату"
             />
+          </div>
           {(priorityFilter !== "all" || assigneeFilter !== "all" || dateFrom || dateTo) && (
             <button
               onClick={() => { setPriorityFilter("all"); setAssigneeFilter("all"); setDateFrom(""); setDateTo(""); }}
