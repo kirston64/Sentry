@@ -21,6 +21,7 @@ import {
   Lock,
   Sun,
   Moon,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "./notification-bell";
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { href: "/deploys", label: "Deploys", icon: Rocket },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
   { href: "/logs", label: "Logs", icon: ScrollText },
+  { href: "/ai", label: "AI Ассистент", icon: Sparkles },
   { href: "/activity", label: "Activity", icon: Activity, minRole: "admin" },
   { href: "/console", label: "Console", icon: TerminalSquare },
   { href: "/settings", label: "Settings", icon: Settings, minRole: "admin" },
