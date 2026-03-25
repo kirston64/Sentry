@@ -52,7 +52,7 @@ export function CreateIncidentModal({ onSave, onClose }: CreateIncidentModalProp
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/50 animate-fade-in" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface p-5 shadow-xl animate-fade-in">
+      <div className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto max-h-[90vh] rounded-lg border border-border bg-surface p-5 shadow-xl animate-fade-in">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-medium text-text-primary">Новый инцидент</h3>
           <button onClick={onClose} className="text-text-muted hover:text-text-primary">

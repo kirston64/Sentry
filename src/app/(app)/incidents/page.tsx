@@ -63,7 +63,7 @@ export default function IncidentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-primary" />
           <h1 className="text-xl font-bold text-text-primary">Incidents</h1>
@@ -71,7 +71,7 @@ export default function IncidentsPage() {
             {incidents.filter((i) => i.status !== "resolved").length} active
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() =>
               downloadCSV(
@@ -114,57 +114,61 @@ export default function IncidentsPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />
         </div>
-        <div className="flex gap-1">
-          {(["all", "active", "resolved"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setStatusFilter(f)}
-              className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
-                statusFilter === f ? "bg-surface-hover text-text-primary" : "text-text-muted hover:text-text-secondary"
-              }`}
-            >
-              {f === "all" ? "Все" : f === "active" ? "Активные" : "Resolved"}
-            </button>
-          ))}
-        </div>
-        <select
-          value={severityFilter}
-          onChange={(e) => setSeverityFilter(e.target.value as Severity | "all")}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-        >
-          <option value="all">Все severity</option>
-          <option value="P1">P1 Critical</option>
-          <option value="P2">P2 High</option>
-          <option value="P3">P3 Medium</option>
-          <option value="P4">P4 Low</option>
-        </select>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-          title="С даты"
-        />
-        <span className="text-xs text-text-muted">—</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-          title="По дату"
-        />
-        {(statusFilter !== "all" || severityFilter !== "all" || dateFrom || dateTo) && (
-          <button
-            onClick={() => { setStatusFilter("all"); setSeverityFilter("all"); setDateFrom(""); setDateTo(""); }}
-            className="text-[10px] text-primary hover:underline"
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            {(["all", "active", "resolved"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
+                  statusFilter === f ? "bg-surface-hover text-text-primary" : "text-text-muted hover:text-text-secondary"
+                }`}
+              >
+                {f === "all" ? "Все" : f === "active" ? "Активные" : "Resolved"}
+              </button>
+            ))}
+          </div>
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value as Severity | "all")}
+            className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
           >
-            Сбросить
-          </button>
-        )}
+            <option value="all">Все severity</option>
+            <option value="P1">P1 Critical</option>
+            <option value="P2">P2 High</option>
+            <option value="P3">P3 Medium</option>
+            <option value="P4">P4 Low</option>
+          </select>
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+              title="С даты"
+            />
+            <span className="text-xs text-text-muted">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+              title="По дату"
+            />
+          </div>
+          {(statusFilter !== "all" || severityFilter !== "all" || dateFrom || dateTo) && (
+            <button
+              onClick={() => { setStatusFilter("all"); setSeverityFilter("all"); setDateFrom(""); setDateTo(""); }}
+              className="text-[10px] text-primary hover:underline"
+            >
+              Сбросить
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2">

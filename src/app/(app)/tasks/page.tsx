@@ -58,56 +58,59 @@ export default function TasksPage() {
         </button>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
           <Filter className="h-3 w-3" />
           Фильтры:
         </div>
-        <select
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value as TaskPriority | "all")}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-        >
-          <option value="all">Все приоритеты</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-        <select
-          value={assigneeFilter}
-          onChange={(e) => setAssigneeFilter(e.target.value)}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-        >
-          <option value="all">Все исполнители</option>
-          <option value="unassigned">Не назначен</option>
-          {users.map((m) => (
-            <option key={m.id} value={m.id}>{m.username}</option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-          title="С даты"
-        />
-        <span className="text-xs text-text-muted">—</span>
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
-          title="По дату"
-        />
-        {(priorityFilter !== "all" || assigneeFilter !== "all" || dateFrom || dateTo) && (
-          <button
-            onClick={() => { setPriorityFilter("all"); setAssigneeFilter("all"); setDateFrom(""); setDateTo(""); }}
-            className="text-[10px] text-primary hover:underline"
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value as TaskPriority | "all")}
+            className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
           >
-            Сбросить
-          </button>
-        )}
+            <option value="all">Все приоритеты</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <select
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value)}
+            className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+          >
+            <option value="all">Все исполнители</option>
+            <option value="unassigned">Не назначен</option>
+            {users.map((m) => (
+              <option key={m.id} value={m.id}>{m.username}</option>
+            ))}
+          </select>
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+              title="С даты"
+            />
+            <span className="text-xs text-text-muted">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary outline-none focus:border-primary"
+              title="По дату"
+            />
+          {(priorityFilter !== "all" || assigneeFilter !== "all" || dateFrom || dateTo) && (
+            <button
+              onClick={() => { setPriorityFilter("all"); setAssigneeFilter("all"); setDateFrom(""); setDateTo(""); }}
+              className="text-[10px] text-primary hover:underline"
+            >
+              Сбросить
+            </button>
+          )}
+        </div>
       </div>
 
       <KanbanBoard priorityFilter={priorityFilter} assigneeFilter={assigneeFilter} dateFrom={dateFrom} dateTo={dateTo} />

@@ -90,8 +90,8 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[600px] text-sm">
           <thead className="bg-surface text-left text-xs uppercase text-text-muted">
             <tr>
               <th className="px-4 py-3">Время</th>

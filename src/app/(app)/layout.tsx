@@ -2,6 +2,7 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MobileHeader } from "@/components/layout/mobile-header";
+import { MobileNav } from "@/components/layout/mobile-nav";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ProfileProvider } from "@/components/auth/profile-context";
 import { LockdownBanner } from "@/components/lockdown/lockdown-banner";
@@ -50,8 +51,9 @@ export default async function AppLayout({
           {profile.role === "owner" && lockdown && (
             <LockdownBanner lockdown={lockdown} userId={profile.id} />
           )}
-          <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+          <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
         </div>
+        <MobileNav />
         <CommandPalette />
         <PresenceTracker />
         {profile.role !== "owner" && <BanChecker />}

@@ -90,7 +90,7 @@ export function AddServerModal({ onClose, onCreated }: AddServerModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-xl border border-border bg-bg shadow-2xl">
+      <div className="w-full max-w-md overflow-y-auto max-h-[90vh] rounded-xl border border-border bg-bg shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2">

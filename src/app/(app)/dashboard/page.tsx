@@ -250,13 +250,13 @@ export default function DashboardPage() {
         </div>
         <div className="divide-y divide-border">
           {data.auditLogs.map((log) => (
-            <div key={log.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-accent">{log.user.fullName || log.user.username}</span>
-                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs text-warning">{log.action}</span>
-                <span className="text-text-secondary text-xs">{log.target}</span>
+            <div key={log.id} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-accent font-medium">{log.user.fullName || log.user.username}</span>
+                <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] text-warning">{log.action}</span>
+                <span className="truncate text-xs text-text-secondary max-w-[180px] sm:max-w-none">{log.target}</span>
               </div>
-              <span className="text-xs text-text-muted">{new Date(log.createdAt).toLocaleString("ru-RU")}</span>
+              <span className="text-[10px] text-text-muted shrink-0">{new Date(log.createdAt).toLocaleString("ru-RU")}</span>
             </div>
           ))}
           {data.auditLogs.length === 0 && (
