@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckSquare, Filter, FileDown } from "lucide-react";
+import { CheckSquare, Filter, FileDown, Sparkles } from "lucide-react";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
+import { ImportTasksModal } from "@/components/tasks/import-tasks-modal";
 import { downloadCSV } from "@/lib/export";
 import type { TaskPriority } from "@/types/task";
 
@@ -11,6 +12,7 @@ interface UserOption { id: string; username: string; fullName: string }
 export default function TasksPage() {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [taskCounts, setTaskCounts] = useState({ total: 0, active: 0 });
+  const [importOpen, setImportOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -48,14 +50,24 @@ export default function TasksPage() {
         <CheckSquare className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold text-text-primary">Tasks</h1>
         <span className="ml-2 text-xs text-text-muted">{taskCounts.active} активных / {taskCounts.total} всего</span>
-        <button
-          onClick={handleExportCSV}
-          className="ml-auto flex items-center gap-1 rounded border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
-          title="Экспорт CSV"
-        >
-          <FileDown className="h-3.5 w-3.5" />
-          CSV
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-xs text-primary hover:bg-primary/20 transition-colors"
+            title="Импорт из текста"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Импорт
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+            title="Экспорт CSV"
+          >
+            <FileDown className="h-3.5 w-3.5" />
+            CSV
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
@@ -115,6 +127,17 @@ export default function TasksPage() {
       </div>
 
       <KanbanBoard priorityFilter={priorityFilter} assigneeFilter={assigneeFilter} dateFrom={dateFrom} dateTo={dateTo} />
+
+      {importOpen && (
+        <ImportTasksModal
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            fetch("/api/tasks").then(r => r.json()).then((tasks) => {
+              setTaskCounts({ total: tasks.length, active: tasks.filter((t: { status: string }) => t.status !== "done").length });
+            });
+          }}
+        />
+      )}
     </div>
   );
 }
