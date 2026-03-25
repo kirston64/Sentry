@@ -43,7 +43,7 @@ Answer (JSON array only):`;
       "X-Title": "Sentry Dashboard",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.0-flash-exp:free",
+      model: "nvidia/llama-3.3-nemotron-super-49b-v1:free",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
       max_tokens: 1024,
