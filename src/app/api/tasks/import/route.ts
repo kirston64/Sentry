@@ -35,7 +35,7 @@ ${text}
 Answer (JSON array only):`;
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(60_000),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -44,7 +44,7 @@ Answer (JSON array only):`;
       "X-Title": "Sentry Dashboard",
     },
     body: JSON.stringify({
-      model: "qwen/qwen3-next-80b-a3b-instruct:free",
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
       messages: [
         { role: "system", content: "You are a JSON-only API. You must respond with a valid JSON array and nothing else. No markdown, no explanations, no code blocks." },
         { role: "user", content: prompt },
