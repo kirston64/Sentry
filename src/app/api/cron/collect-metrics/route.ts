@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { collectViaSSH } from "@/lib/ssh-collect";
 
 export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -12,6 +13,43 @@ export async function POST(request: Request) {
   const results = [];
 
   for (const server of servers) {
+    // For Linux servers with SSH — do real collect and skip simulation
+    if (server.type === "linux" && server.sshUser && server.sshPassword) {
+      try {
+        const { metrics: sshMetrics, connectedUsers } = await collectViaSSH(
+          server.ip, server.port, server.sshUser, server.sshPassword, server.type
+        );
+        await prisma.$transaction([
+          prisma.serverMetrics.create({
+            data: {
+              serverId: server.id,
+              cpuPercent: sshMetrics.cpuPercent,
+              ramPercent: sshMetrics.ramPercent,
+              diskPercent: sshMetrics.diskPercent,
+              uptimeSeconds: sshMetrics.uptimeSeconds,
+              activeUsers: sshMetrics.activeUsers,
+              playersOnline: sshMetrics.playersOnline,
+              connectedUsers: JSON.stringify(connectedUsers),
+              tickRate: 64,
+            },
+          }),
+          prisma.server.update({
+            where: { id: server.id },
+            data: { status: "online", lastSeenAt: new Date(), collectError: null },
+          }),
+        ]);
+        results.push({ server: server.name, metrics: sshMetrics });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "SSH error";
+        await prisma.server.update({
+          where: { id: server.id },
+          data: { status: "offline", collectError: msg },
+        }).catch(() => {});
+        results.push({ server: server.name, error: msg });
+      }
+      continue;
+    }
+
     let metrics;
     try {
       const controller = new AbortController();

@@ -94,8 +94,9 @@ export function FailedLoginsAlert() {
             <Trash2 className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={() => setDismissed(true)}
+            onClick={clearAll}
             className="text-error/70 hover:text-error transition-colors"
+            title="Закрыть"
           >
             <X className="h-4 w-4" />
           </button>
