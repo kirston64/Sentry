@@ -14,73 +14,56 @@ export async function POST(request: Request) {
   const { text } = await request.json();
   if (!text?.trim()) return NextResponse.json({ error: "Текст не передан" }, { status: 400 });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY не настроен" }, { status: 500 });
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return NextResponse.json({ error: "OPENROUTER_API_KEY не настроен" }, { status: 500 });
 
-  const prompt = `Ты помощник DevOps команды. Разбери следующий текст и извлеки из него задачи.
-Верни ТОЛЬКО JSON массив без лишнего текста, без markdown, без \`\`\`.
+  const prompt = `You are a DevOps team assistant. Parse the following text and extract tasks from it.
+Return ONLY a JSON array, no extra text, no markdown, no \`\`\`.
 
-Для каждой задачи определи:
-- title: краткое название (до 80 символов)
-- description: подробности если есть, иначе пустая строка
-- priority: одно из "critical", "high", "medium", "low"
-  - critical: срочно, критично, asap, горит, блокирует
-  - high: важно, приоритет, быстро
-  - low: потом, не срочно, когда будет время
-  - medium: всё остальное
+For each task determine:
+- title: short name (max 80 chars), in the original language
+- description: details if present, otherwise empty string
+- priority: one of "critical", "high", "medium", "low"
+  - critical: срочно/urgent/asap/горит/блокирует/critical
+  - high: важно/важный/быстро/high/important
+  - low: потом/не срочно/позже/low/when possible
+  - medium: everything else
 
-Текст:
+Text:
 ${text}
 
-Ответ (только JSON массив):`;
+Answer (JSON array only):`;
+
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://sentry-dashboard.local",
+      "X-Title": "Sentry Dashboard",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.0-flash-exp:free",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    return NextResponse.json({ error: err.error?.message || `OpenRouter error ${res.status}` }, { status: 500 });
+  }
+
+  const data = await res.json();
+  const raw = data.choices?.[0]?.message?.content ?? "";
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const err = await res.json();
-      return NextResponse.json({ error: err.error?.message || "Ошибка Gemini" }, { status: 500 });
-    }
-
-    const data = await res.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const cleaned = raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
     const tasks: ParsedTask[] = JSON.parse(cleaned);
-
-    if (!Array.isArray(tasks)) throw new Error("Не массив");
+    if (!Array.isArray(tasks)) throw new Error();
     return NextResponse.json({ tasks });
-  } catch (e) {
-    // Fallback to local keyword parser
-    const tasks = parseFallback(text);
-    return NextResponse.json({ tasks });
+  } catch {
+    return NextResponse.json({ error: "Не удалось разобрать ответ модели", raw }, { status: 500 });
   }
-}
-
-// Local fallback parser
-type Priority = "critical" | "high" | "medium" | "low";
-const CRITICAL = /срочно|критич|asap|горит|блокир|urgent|немедленно/i;
-const HIGH     = /важно|высокий|быстро|important|надо срочно/i;
-const LOW      = /потом|не срочно|когда.нибудь|позже|при случае/i;
-
-function parseFallback(text: string): ParsedTask[] {
-  return text
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 2)
-    .map((line) => ({
-      title: line.replace(/^[-*•>\d]+[.)]\s*/, "").replace(/\(.*?\)/g, "").trim().slice(0, 120),
-      description: "",
-      priority: (CRITICAL.test(line) ? "critical" : HIGH.test(line) ? "high" : LOW.test(line) ? "low" : "medium") as Priority,
-    }))
-    .filter((t) => t.title.length > 0);
 }
