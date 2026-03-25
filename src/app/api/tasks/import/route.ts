@@ -44,7 +44,7 @@ Answer (JSON array only):`;
       "X-Title": "Sentry Dashboard",
     },
     body: JSON.stringify({
-      model: "stepfun/step-3.5-flash:free",
+      model: "qwen/qwen3-next-80b-a3b-instruct:free",
       messages: [
         { role: "system", content: "You are a JSON-only API. You must respond with a valid JSON array and nothing else. No markdown, no explanations, no code blocks." },
         { role: "user", content: prompt },
