@@ -191,9 +191,13 @@ export function Sidebar({ profile }: { profile: Profile }) {
           href="/profile"
           className="mt-1 flex items-center gap-2 rounded-md px-3 py-1.5 text-xs text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
         >
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
-            {(profile.github_username ?? "U")[0].toUpperCase()}
-          </div>
+          {profile.avatar_url ? (
+            <img src={profile.avatar_url} alt="avatar" className="h-6 w-6 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
+              {(profile.github_username ?? "U")[0].toUpperCase()}
+            </div>
+          )}
           <span className="truncate">{profile.full_name || profile.github_username || "User"}</span>
         </Link>
         <button

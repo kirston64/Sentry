@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useProfile } from "@/components/auth/profile-context";
 import {
   User, Lock, Shield, Monitor, Clock, Save, AlertTriangle,
-  MessageSquare, Globe, KeyRound, Trash2, CheckCircle, Briefcase
+  MessageSquare, Globe, KeyRound, Trash2, CheckCircle, Briefcase, Camera
 } from "lucide-react";
 import { PROFESSIONS, parseSpecialties } from "@/lib/professions";
 
@@ -30,6 +30,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Form fields
   const [fullName, setFullName] = useState("");
@@ -57,6 +60,7 @@ export default function ProfilePage() {
       setTelegram(d.telegram || "");
       setGithub(d.github || "");
       setSpecialties(parseSpecialties(d.specialties || "[]"));
+      setAvatar(d.avatar || null);
     }
     setLoading(false);
   }, []);
@@ -73,7 +77,7 @@ export default function ProfilePage() {
     const res = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName, bio, timezone, discord, telegram, github, specialties }),
+      body: JSON.stringify({ fullName, bio, timezone, discord, telegram, github, specialties, ...(avatar !== (data?.avatar || null) ? { avatar } : {}) }),
     });
     if (res.ok) {
       showMessage("success", "Профиль обновлён");
@@ -147,8 +151,35 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-xl font-bold text-primary">
-          {data.fullName.charAt(0).toUpperCase()}
+        <div
+          className="relative h-14 w-14 cursor-pointer group"
+          onClick={() => avatarInputRef.current?.click()}
+          title="Сменить аватар"
+        >
+          {avatar ? (
+            <img src={avatar} alt="avatar" className="h-14 w-14 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 text-xl font-bold text-primary">
+              {data.fullName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+            <Camera className="h-5 w-5 text-white" />
+          </div>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              if (file.size > 512 * 1024) { showMessage("error", "Файл слишком большой (макс. 512 КБ)"); return; }
+              const reader = new FileReader();
+              reader.onload = () => setAvatar(reader.result as string);
+              reader.readAsDataURL(file);
+            }}
+          />
         </div>
         <div>
           <h1 className="text-xl font-bold text-text-primary">{data.fullName}</h1>

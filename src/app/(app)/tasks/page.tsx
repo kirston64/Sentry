@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckSquare, Filter } from "lucide-react";
+import { CheckSquare, Filter, FileDown } from "lucide-react";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
+import { downloadCSV } from "@/lib/export";
 import type { TaskPriority } from "@/types/task";
 
 interface UserOption { id: string; username: string; fullName: string }
@@ -22,12 +23,37 @@ export default function TasksPage() {
     });
   }, []);
 
+  const handleExportCSV = async () => {
+    const res = await fetch("/api/tasks");
+    if (!res.ok) return;
+    const tasks = await res.json();
+    downloadCSV(
+      tasks.map((t: { id: string; title: string; status: string; priority: string; assignee?: { fullName?: string; username?: string } | null; createdAt: string }) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        assignee: t.assignee ? (t.assignee.fullName || t.assignee.username || "") : "",
+        createdAt: t.createdAt,
+      })),
+      `tasks-${new Date().toISOString().slice(0, 10)}`
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <CheckSquare className="h-5 w-5 text-primary" />
         <h1 className="text-xl font-bold text-text-primary">Tasks</h1>
         <span className="ml-2 text-xs text-text-muted">{taskCounts.active} активных / {taskCounts.total} всего</span>
+        <button
+          onClick={handleExportCSV}
+          className="ml-auto flex items-center gap-1 rounded border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors"
+          title="Экспорт CSV"
+        >
+          <FileDown className="h-3.5 w-3.5" />
+          CSV
+        </button>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">

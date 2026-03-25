@@ -46,7 +46,7 @@ export async function PATCH(request: Request) {
     if (!profile) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
 
     const body = await request.json();
-    const allowed = ["fullName", "bio", "timezone", "discord", "telegram", "github"];
+    const allowed = ["fullName", "bio", "timezone", "discord", "telegram", "github", "avatar"];
 
     // Handle specialties separately (array → JSON)
     if (Array.isArray(body.specialties)) {

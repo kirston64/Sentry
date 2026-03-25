@@ -18,15 +18,23 @@ import {
   ScrollText,
   RotateCcw,
   Plus,
+  User,
 } from "lucide-react";
 import { clsx } from "clsx";
 
 interface PaletteItem {
   id: string;
   label: string;
-  section: "Navigation" | "Actions";
+  sublabel?: string;
+  section: "Navigation" | "Actions" | "Tasks" | "Incidents" | "Team";
   icon: React.ElementType;
   action: () => void;
+}
+
+interface SearchResult {
+  tasks: { id: string; title: string; status: string; priority: string }[];
+  incidents: { id: string; title: string; severity: string; status: string }[];
+  users: { id: string; username: string; fullName: string }[];
 }
 
 export function CommandPalette() {
@@ -34,7 +42,10 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const items: PaletteItem[] = [
     { id: "dashboard", label: "Dashboard", section: "Navigation", icon: LayoutDashboard, action: () => router.push("/dashboard") },
@@ -53,14 +64,60 @@ export function CommandPalette() {
     { id: "newtask", label: "Create Task", section: "Actions", icon: Plus, action: () => router.push("/tasks") },
   ];
 
-  const filtered = query
+  // Debounced search against real data
+  useEffect(() => {
+    if (!open || query.length < 2) { setSearchResults(null); return; }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        if (res.ok) setSearchResults(await res.json());
+      } catch { /* ignore */ }
+      setSearching(false);
+    }, 250);
+  }, [query, open]);
+
+  const resultItems: PaletteItem[] = searchResults ? [
+    ...searchResults.tasks.map((t) => ({
+      id: `task-${t.id}`,
+      label: t.title,
+      sublabel: `${t.status} · ${t.priority}`,
+      section: "Tasks" as const,
+      icon: CheckSquare,
+      action: () => router.push("/tasks"),
+    })),
+    ...searchResults.incidents.map((i) => ({
+      id: `incident-${i.id}`,
+      label: i.title,
+      sublabel: `${i.severity} · ${i.status}`,
+      section: "Incidents" as const,
+      icon: AlertTriangle,
+      action: () => router.push(`/incidents/${i.id}`),
+    })),
+    ...searchResults.users.map((u) => ({
+      id: `user-${u.id}`,
+      label: u.fullName,
+      sublabel: `@${u.username}`,
+      section: "Team" as const,
+      icon: User,
+      action: () => router.push(`/team/${u.id}`),
+    })),
+  ] : [];
+
+  const navFiltered = query
     ? items.filter((i) => i.label.toLowerCase().includes(query.toLowerCase()))
     : items;
+
+  const filtered = query.length >= 2 && searchResults
+    ? [...resultItems, ...navFiltered]
+    : navFiltered;
 
   const toggle = useCallback(() => {
     setOpen((o) => !o);
     setQuery("");
     setSelectedIdx(0);
+    setSearchResults(null);
   }, []);
 
   useKeyboardShortcut("k", toggle, { ctrl: true });
@@ -113,7 +170,7 @@ export function CommandPalette() {
               setSelectedIdx(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Поиск команд..."
+            placeholder="Поиск задач, инцидентов, команды..."
             className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder-text-muted"
           />
           <kbd className="rounded border border-border px-1.5 py-0.5 text-[10px] text-text-muted">
@@ -122,13 +179,16 @@ export function CommandPalette() {
         </div>
 
         {/* Results */}
-        <div className="max-h-64 overflow-y-auto py-1">
-          {filtered.length === 0 && (
+        <div className="max-h-72 overflow-y-auto py-1">
+          {searching && (
+            <p className="px-3 py-3 text-center text-xs text-text-muted animate-pulse">Поиск...</p>
+          )}
+          {!searching && filtered.length === 0 && (
             <p className="px-3 py-4 text-center text-xs text-text-muted">
               Ничего не найдено
             </p>
           )}
-          {sections.map((section) => (
+          {!searching && sections.map((section) => (
             <div key={section}>
               <p className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">
                 {section}
@@ -149,8 +209,11 @@ export function CommandPalette() {
                           : "text-text-secondary"
                       )}
                     >
-                      <item.icon className="h-4 w-4 text-text-muted" />
-                      {item.label}
+                      <item.icon className="h-4 w-4 shrink-0 text-text-muted" />
+                      <span className="flex-1 truncate text-left">{item.label}</span>
+                      {item.sublabel && (
+                        <span className="text-[10px] text-text-muted shrink-0">{item.sublabel}</span>
+                      )}
                     </button>
                   );
                 })}
