@@ -19,6 +19,12 @@ interface Chat {
 
 const FREE_MODELS = [
   { id: "nvidia/nemotron-3-super-120b-a12b:free", name: "Nemotron 3 Super 120B" },
+  { id: "minimax/minimax-m2.5:free", name: "MiniMax M2.5" },
+  { id: "stepfun/step-3.5-flash:free", name: "StepFun 3.5 Flash" },
+  { id: "arcee-ai/trinity-large-preview:free", name: "Arcee Trinity Large" },
+  { id: "qwen/qwen3-next-80b-a3b-instruct:free", name: "Qwen3 Next 80B" },
+  { id: "z-ai/glm-4.5-air:free", name: "GLM-4.5 Air" },
+  { id: "google/gemma-3n-e4b-it:free", name: "Gemma 3N E4B" },
   { id: "meta-llama/llama-3.1-8b-instruct:free", name: "Llama 3.1 8B" },
   { id: "microsoft/phi-4-reasoning:free", name: "Phi-4 Reasoning" },
   { id: "deepseek/deepseek-r1-0528:free", name: "DeepSeek R1" },
