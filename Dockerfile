@@ -35,6 +35,8 @@ COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlit
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY --from=builder /app/node_modules/ssh2 ./node_modules/ssh2
 COPY --from=builder /app/node_modules/cpu-features ./node_modules/cpu-features
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
