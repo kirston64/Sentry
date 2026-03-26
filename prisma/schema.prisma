@@ -47,6 +47,7 @@ model User {
   incidentEvents   IncidentEvent[]
   wikiArticles     WikiArticle[]   @relation("WikiAuthor")
   aiChats          AIChat[]
+  backups          Backup[]
 }
 
 model Session {
@@ -152,6 +153,8 @@ model Server {
   logs              LogEntry[]
   uptimeChecks      UptimeCheck[]
   scheduledRestarts ScheduledRestart[]
+  alertThreshold    AlertThreshold?
+  backups           Backup[]
 }
 
 model ServerMetrics {
@@ -358,6 +361,41 @@ model AIChatMessage {
   createdAt DateTime @default(now())
 
   chat AIChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}
+
+// ============ ALERT THRESHOLDS ============
+
+model AlertThreshold {
+  id            String   @id @default(cuid())
+  serverId      String   @unique
+  cpuPercent    Float?   // null = disabled
+  ramPercent    Float?
+  diskPercent   Float?
+  playersOnline Int?
+  cooldownMin   Int      @default(15) // минут между повторными алертами
+  lastAlertAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+}
+
+// ============ BACKUPS ============
+
+model Backup {
+  id        String   @id @default(cuid())
+  serverId  String?
+  name      String
+  size      Int      @default(0) // bytes
+  status    String   @default("pending") // pending, running, success, failed
+  path      String?
+  notes     String?
+  createdBy String
+  createdAt DateTime @default(now())
+  finishedAt DateTime?
+
+  server Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  creator User   @relation(fields: [createdBy], references: [id])
 }
 
 // ============ SYSTEM LOCKDOWN ============

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { StatCard } from "@/components/ui/stat-card";
 import { ServerStatusWidget } from "@/components/dashboard/server-status-widget";
 import { QuickActions } from "@/components/dashboard/quick-actions";
@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Rocket,
   XCircle,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -38,53 +39,81 @@ const DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [live, setLive] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadFull = useCallback(async (cancelled: { current: boolean }) => {
+    const [servers, incidents, deploys, auditLogs, users, uptime] = await Promise.all([
+      fetch("/api/servers").then(r => r.json()).catch(() => []),
+      fetch("/api/incidents").then(r => r.json()).catch(() => []),
+      fetch("/api/deploys").then(r => r.json()).catch(() => []),
+      fetch("/api/audit?limit=5").then(r => r.json()).catch(() => []),
+      fetch("/api/users").then(r => r.json()).catch(() => []),
+      fetch("/api/uptime?days=7").then(r => r.json()).catch(() => []),
+    ]);
 
-    async function load() {
-      const [servers, incidents, deploys, auditLogs, users, uptime] = await Promise.all([
-        fetch("/api/servers").then(r => r.json()).catch(() => []),
-        fetch("/api/incidents").then(r => r.json()).catch(() => []),
-        fetch("/api/deploys").then(r => r.json()).catch(() => []),
-        fetch("/api/audit?limit=5").then(r => r.json()).catch(() => []),
-        fetch("/api/users").then(r => r.json()).catch(() => []),
-        fetch("/api/uptime?days=7").then(r => r.json()).catch(() => []),
-      ]);
+    if (cancelled.current) return;
 
-      if (cancelled) return;
+    const uptimeArr = Array.isArray(uptime) ? uptime : [];
+    const avgUptime = uptimeArr.length > 0
+      ? Math.round(uptimeArr.reduce((s: number, u: { uptimePercent: number }) => s + u.uptimePercent, 0) / uptimeArr.length * 10) / 10
+      : 99.7;
 
-      // Calculate average uptime from all servers
-      const uptimeArr = Array.isArray(uptime) ? uptime : [];
-      const avgUptime = uptimeArr.length > 0
-        ? Math.round(uptimeArr.reduce((s: number, u: { uptimePercent: number }) => s + u.uptimePercent, 0) / uptimeArr.length * 10) / 10
-        : 99.7;
-
-      // Generate commit activity from deploys (group by day of week)
-      const commitActivity = DAYS.map((label, i) => {
-        const dayDeploys = deploys.filter((d: { startedAt: string }) => {
-          const day = new Date(d.startedAt).getDay();
-          return (day === 0 ? 6 : day - 1) === i;
-        });
-        return { label, value: dayDeploys.length || 0 };
+    const commitActivity = DAYS.map((label, i) => {
+      const dayDeploys = deploys.filter((d: { startedAt: string }) => {
+        const day = new Date(d.startedAt).getDay();
+        return (day === 0 ? 6 : day - 1) === i;
       });
+      return { label, value: dayDeploys.length || 0 };
+    });
 
-      // Set initial data with empty player history
-      setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
+    setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
+    setLastUpdated(new Date());
 
-      // Fetch real player history for first server
-      if (servers[0]?.id) {
-        const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r => r.json()).catch(() => null);
-        if (!cancelled && srv?.metrics?.length > 1) {
-          const playerHistory = srv.metrics.map((m: { playersOnline: number }) => m.playersOnline);
-          setData(prev => prev ? { ...prev, playerHistory } : null);
-        }
+    if (servers[0]?.id) {
+      const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r => r.json()).catch(() => null);
+      if (!cancelled.current && srv?.metrics?.length > 1) {
+        const playerHistory = srv.metrics.map((m: { playersOnline: number }) => m.playersOnline);
+        setData(prev => prev ? { ...prev, playerHistory } : null);
       }
     }
-
-    load();
-    return () => { cancelled = true; };
   }, []);
+
+  // SSE stream for live server/incident/deploy updates
+  useEffect(() => {
+    const es = new EventSource("/api/dashboard/stream");
+    esRef.current = es;
+    es.onopen = () => setLive(true);
+    es.onerror = () => setLive(false);
+    es.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        setLastUpdated(new Date());
+        setData(prev => prev ? {
+          ...prev,
+          servers: payload.servers ?? prev.servers,
+          incidents: payload.incidents ?? prev.incidents,
+          deploys: payload.deploys ?? prev.deploys,
+        } : prev);
+      } catch { /* ignore */ }
+    };
+    return () => { es.close(); setLive(false); };
+  }, []);
+
+  useEffect(() => {
+    const cancelled = { current: false };
+    loadFull(cancelled);
+    return () => { cancelled.current = true; };
+  }, [loadFull]);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    const cancelled = { current: false };
+    await loadFull(cancelled);
+    setRefreshing(false);
+  };
 
   if (!data) {
     return (
@@ -112,7 +141,28 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
-        <span className="text-xs text-text-muted">GTA 5 RP Dev-Ops</span>
+        <div className="flex items-center gap-3">
+          {live && (
+            <span className="flex items-center gap-1 text-[11px] text-success font-medium">
+              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+              LIVE
+            </span>
+          )}
+          {lastUpdated && (
+            <span className="text-xs text-text-muted">
+              Обновлено: {lastUpdated.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          )}
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors disabled:opacity-40"
+            title="Обновить"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+          <span className="text-xs text-text-muted">GTA 5 RP Dev-Ops</span>
+        </div>
       </div>
 
       <FailedLoginsAlert />

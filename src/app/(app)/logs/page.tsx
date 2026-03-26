@@ -378,6 +378,22 @@ function ServerLogsTab() {
           <FileDown className="h-3.5 w-3.5" />
           JSON
         </button>
+        <a
+          href={(() => {
+            const p = new URLSearchParams();
+            p.set("format", "log");
+            if (serverId) p.set("serverId", serverId);
+            if (level) p.set("level", level);
+            if (search) p.set("search", search);
+            return `/api/logs/download?${p}`;
+          })()}
+          download
+          className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+          title="Скачать .log (все записи)"
+        >
+          <FileDown className="h-3.5 w-3.5" />
+          .LOG
+        </a>
       </div>
 
       {/* Log terminal */}

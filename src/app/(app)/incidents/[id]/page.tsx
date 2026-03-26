@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect } from "react";
 import { clsx } from "clsx";
-import { AlertTriangle, FileText, Save, Edit3 } from "lucide-react";
+import { AlertTriangle, FileText, Save, Edit3, Bot, Loader2 } from "lucide-react";
 import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { IncidentTimeline } from "@/components/incidents/incident-timeline";
 import { useProfile } from "@/components/auth/profile-context";
@@ -28,6 +28,8 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
   const [incident, setIncident] = useState<Incident | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingPostmortem, setEditingPostmortem] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [pmForm, setPmForm] = useState<Postmortem>({
     whatBroke: "", rootCause: "", fix: "", prevention: "",
     author: profile.github_username ?? "Unknown", writtenAt: new Date().toISOString(),
@@ -149,6 +151,44 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
             </div>
           </div>
         </div>
+      </div>
+
+      {/* AI Analysis */}
+      <div className="rounded-lg border border-border bg-surface p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-medium text-text-primary">AI-анализ инцидента</h2>
+          </div>
+          <button
+            onClick={async () => {
+              setAiLoading(true);
+              setAiAnalysis(null);
+              try {
+                const res = await fetch(`/api/incidents/${id}/ai-analyze`, { method: "POST" });
+                const data = await res.json();
+                setAiAnalysis(data.analysis ?? data.error ?? "Нет ответа");
+              } catch {
+                setAiAnalysis("Ошибка при запросе AI");
+              } finally {
+                setAiLoading(false);
+              }
+            }}
+            disabled={aiLoading}
+            className="flex items-center gap-1.5 rounded bg-primary/10 border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bot className="h-3 w-3" />}
+            {aiLoading ? "Анализирую..." : "Проанализировать"}
+          </button>
+        </div>
+        {aiAnalysis && (
+          <div className="rounded border border-primary/20 bg-primary/5 p-4 text-xs text-text-secondary whitespace-pre-wrap leading-relaxed">
+            {aiAnalysis}
+          </div>
+        )}
+        {!aiAnalysis && !aiLoading && (
+          <p className="text-xs text-text-muted">AI проанализирует timeline событий и последние логи серверов, чтобы найти корневую причину и предложить решения.</p>
+        )}
       </div>
 
       {/* Timeline */}

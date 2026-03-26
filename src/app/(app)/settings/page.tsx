@@ -2,13 +2,14 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { canViewSettings, canManageUsers } from "@/lib/rbac";
 import { AccessDenied } from "@/components/auth/access-denied";
-import { Settings, Users, ShieldAlert, Send, KeyRound, ShieldOff } from "lucide-react";
+import { Settings, Users, ShieldAlert, Send, KeyRound, ShieldOff, Bell } from "lucide-react";
 import { TelegramSetup } from "@/components/settings/telegram-setup";
 import { OTPManager } from "@/components/settings/otp-manager";
 import { prisma } from "@/lib/db";
 import { DeviceCodesManager } from "@/components/settings/device-codes-manager";
 import { UserManager } from "@/components/settings/user-manager";
 import { LockdownPanel } from "@/components/lockdown/lockdown-panel";
+import { AlertThresholds } from "@/components/settings/alert-thresholds";
 
 export default async function SettingsPage() {
   const profile = await getSession();
@@ -97,6 +98,17 @@ export default async function SettingsPage() {
           <TelegramSetup />
         </div>
       )}
+
+      {/* Alert Thresholds */}
+      <div className="rounded-lg border border-border bg-surface">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <Bell className="h-4 w-4 text-warning" />
+          <h2 className="text-sm font-medium text-text-primary">Пороги алертов</h2>
+        </div>
+        <div className="p-5">
+          <AlertThresholds />
+        </div>
+      </div>
 
       {/* Emergency Lockdown */}
       {isOwner && (

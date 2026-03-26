@@ -22,6 +22,9 @@ import {
   Sun,
   Moon,
   Sparkles,
+  CalendarClock,
+  HardDrive,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "./notification-bell";
@@ -46,6 +49,9 @@ const navItems: NavItem[] = [
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
   { href: "/logs", label: "Logs", icon: ScrollText },
   { href: "/ai", label: "OpenRouter", icon: Sparkles },
+  { href: "/schedule", label: "Schedule", icon: CalendarClock, minRole: "admin" },
+  { href: "/backups", label: "Backups", icon: HardDrive },
+  { href: "/changelog", label: "Changelog", icon: BookOpen },
   { href: "/activity", label: "Activity", icon: Activity, minRole: "admin" },
   { href: "/console", label: "Console", icon: TerminalSquare },
   { href: "/settings", label: "Settings", icon: Settings, minRole: "admin" },

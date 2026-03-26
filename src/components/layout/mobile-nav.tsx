@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Server, CheckSquare, AlertTriangle, Sparkles } from "lucide-react";
+import { LayoutDashboard, Server, CheckSquare, AlertTriangle, HardDrive } from "lucide-react";
 import { clsx } from "clsx";
 
 const items = [
@@ -10,7 +10,7 @@ const items = [
   { href: "/servers", icon: Server, label: "Servers" },
   { href: "/tasks", icon: CheckSquare, label: "Tasks" },
   { href: "/incidents", icon: AlertTriangle, label: "Incidents" },
-  { href: "/ai", icon: Sparkles, label: "AI" },
+  { href: "/backups", icon: HardDrive, label: "Backups" },
 ];
 
 export function MobileNav() {

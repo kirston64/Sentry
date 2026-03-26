@@ -67,6 +67,56 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         : []),
     ]);
 
+    // Check alert thresholds
+    const threshold = await prisma.alertThreshold.findUnique({ where: { serverId: id } });
+    if (threshold) {
+      const now = new Date();
+      const cooldownMs = (threshold.cooldownMin ?? 15) * 60 * 1000;
+      const canAlert = !threshold.lastAlertAt || (now.getTime() - threshold.lastAlertAt.getTime() > cooldownMs);
+
+      if (canAlert) {
+        const breaches: string[] = [];
+        if (threshold.cpuPercent != null && metrics.cpuPercent >= threshold.cpuPercent)
+          breaches.push(`CPU ${metrics.cpuPercent.toFixed(1)}% >= ${threshold.cpuPercent}%`);
+        if (threshold.ramPercent != null && metrics.ramPercent >= threshold.ramPercent)
+          breaches.push(`RAM ${metrics.ramPercent.toFixed(1)}% >= ${threshold.ramPercent}%`);
+        if (threshold.diskPercent != null && metrics.diskPercent >= threshold.diskPercent)
+          breaches.push(`Disk ${metrics.diskPercent.toFixed(1)}% >= ${threshold.diskPercent}%`);
+        if (threshold.playersOnline != null && metrics.playersOnline >= threshold.playersOnline)
+          breaches.push(`Игроки ${metrics.playersOnline} >= ${threshold.playersOnline}`);
+
+        if (breaches.length > 0) {
+          await prisma.alertThreshold.update({
+            where: { serverId: id },
+            data: { lastAlertAt: now },
+          });
+
+          const admin = await prisma.user.findFirst({ where: { role: { in: ["owner", "admin"] } } });
+          if (admin) {
+            await prisma.incident.create({
+              data: {
+                title: `[Авто] Превышены пороги на ${server.name}: ${breaches.join(", ")}`,
+                severity: "P2",
+                status: "investigating",
+                creatorId: admin.id,
+                timeline: {
+                  create: {
+                    message: `Автоматически обнаружено превышение порогов: ${breaches.join(", ")}`,
+                    authorId: admin.id,
+                  },
+                },
+              },
+            });
+          }
+
+          sendCriticalAlert(
+            `Превышены пороги: ${server.name}`,
+            `⚠️ <b>${server.name}</b>\n\n${breaches.map(b => `• ${b}`).join("\n")}`
+          ).catch(() => {});
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, metrics });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
