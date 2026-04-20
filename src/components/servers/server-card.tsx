@@ -36,9 +36,11 @@ interface ServerCardProps {
   server: Server & { type?: string; collectError?: string | null; hasSSH?: boolean; lastSeenAt?: string | null };
   baseMetrics: ExtendedMetrics;
   uptimePercent?: number;
+  selected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
-export function ServerCard({ server, baseMetrics, uptimePercent }: ServerCardProps) {
+export function ServerCard({ server, baseMetrics, uptimePercent, selected, onSelect }: ServerCardProps) {
   const isOnline = server.status === "online";
   const isLinux = server.type === "linux";
   const isConnecting = !isOnline && server.hasSSH && !server.collectError && !server.lastSeenAt;
@@ -46,9 +48,24 @@ export function ServerCard({ server, baseMetrics, uptimePercent }: ServerCardPro
   const lastSeen = formatLastSeen(server.lastSeenAt);
 
   return (
+    <div className="relative">
+      {onSelect && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onSelect(server.id); }}
+          className={`absolute left-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+            selected
+              ? "border-primary bg-primary text-white"
+              : "border-border bg-surface hover:border-primary"
+          }`}
+        >
+          {selected && <span className="text-[10px] font-bold">✓</span>}
+        </button>
+      )}
     <Link
       href={`/servers/${server.id}`}
-      className="block rounded-lg border border-border bg-surface overflow-hidden transition-transform hover:scale-[1.02]"
+      className={`block rounded-lg border bg-surface overflow-hidden transition-transform hover:scale-[1.02] ${
+        selected ? "border-primary" : "border-border"
+      }`}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -153,5 +170,6 @@ export function ServerCard({ server, baseMetrics, uptimePercent }: ServerCardPro
         </div>
       )}
     </Link>
+    </div>
   );
 }
