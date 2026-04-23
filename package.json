@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron-package": "npm run build && electron-builder"
+    "electron-package": "npm run build && npm run prepare-electron && electron-builder",
+    "prepare-electron": "mkdir -p .next/standalone/public && cp -r public/* .next/standalone/public/ || true && mkdir -p .next/standalone/.next/static && cp -r .next/static/* .next/standalone/.next/static/ || true"
   },
   "build": {
     "appId": "com.sentry.dashboard",
@@ -20,12 +21,20 @@
     "files": [
       "electron-main.js",
       ".next/standalone/**/*",
-      ".next/static/**/*",
       "public/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "prisma/dev.db",
+        "to": "prisma/dev.db"
+      }
     ],
     "win": {
       "target": "portable",
       "icon": "public/favicon.ico"
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools"
     },
     "asar": false
   },
