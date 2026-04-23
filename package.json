@@ -10,7 +10,7 @@
     "lint": "next lint",
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron-package": "npm run build && npm run prepare-electron && electron-builder",
-    "prepare-electron": "mkdir -p .next/standalone/public && cp -r public/* .next/standalone/public/ || true && mkdir -p .next/standalone/.next/static && cp -r .next/static/* .next/standalone/.next/static/ || true"
+    "prepare-electron": "node scripts/prepare-electron.mjs"
   },
   "build": {
     "appId": "com.sentry.dashboard",
