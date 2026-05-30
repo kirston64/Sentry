@@ -236,7 +236,11 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
               <p className="text-xs text-text-secondary leading-relaxed">{incident.postmortem.prevention}</p>
             </div>
             <div className="flex items-center gap-2 pt-2 border-t border-border text-[10px] text-text-muted">
-              <span>Автор: <span className="text-accent">{incident.postmortem.author}</span></span>
+              <span>Автор: <span className="text-accent">
+                {typeof incident.postmortem.author === "object" && incident.postmortem.author !== null
+                  ? ((incident.postmortem.author as { fullName?: string; username?: string }).fullName || (incident.postmortem.author as { username?: string }).username || "unknown")
+                  : (incident.postmortem.author || "unknown")}
+              </span></span>
               <span>{new Date(incident.postmortem.writtenAt).toLocaleString("ru-RU")}</span>
             </div>
           </div>

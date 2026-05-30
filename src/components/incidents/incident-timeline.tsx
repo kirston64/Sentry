@@ -21,7 +21,11 @@ export function IncidentTimeline({ events }: { events: IncidentEvent[] }) {
             <div>
               <div className="flex items-center gap-2 text-[10px] text-text-muted">
                 <span>{new Date(event.timestamp).toLocaleString("ru-RU")}</span>
-                <span className="text-accent">{event.author}</span>
+                <span className="text-accent">
+                  {typeof event.author === "object" && event.author !== null
+                    ? ((event.author as { fullName?: string; username?: string }).fullName || (event.author as { username?: string }).username || "unknown")
+                    : (event.author || "unknown")}
+                </span>
               </div>
               <p className="mt-0.5 text-sm text-text-secondary">{event.message}</p>
             </div>
