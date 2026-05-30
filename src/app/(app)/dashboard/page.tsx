@@ -127,53 +127,49 @@ export default function DashboardPage() {
   }, []);
 
   // ── data loading ─────────────────────────────────────────────────────────────
-  const loadFull = useCallback(async (cancelled: { current: boolean }) => {
+  const fetchData = async (): Promise<DashboardData> => {
+    const toArr = (v: unknown) => Array.isArray(v) ? v : [];
+    const j = (r: Response) => r.ok ? r.json().catch(() => []) : [];
+    const [rawS, rawI, rawD, rawA, rawU, rawUp] = await Promise.all([
+      fetch("/api/servers").then(j).catch(()=>[]),
+      fetch("/api/incidents").then(j).catch(()=>[]),
+      fetch("/api/deploys").then(j).catch(()=>[]),
+      fetch("/api/audit?limit=5").then(j).catch(()=>[]),
+      fetch("/api/users").then(j).catch(()=>[]),
+      fetch("/api/uptime?days=7").then(j).catch(()=>[]),
+    ]);
+    const servers   = toArr(rawS);
+    const incidents = toArr(rawI);
+    const deploys   = toArr(rawD);
+    const auditLogs = toArr(rawA);
+    const users     = toArr(rawU);
+    const uptimeArr = toArr(rawUp);
+    const avgUptime = uptimeArr.length > 0
+      ? Math.round(uptimeArr.reduce((s:number,u:{uptimePercent:number})=>s+u.uptimePercent,0)/uptimeArr.length*10)/10
+      : 99.7;
+    const commitActivity = DAYS.map((label, i) => ({
+      label,
+      value: deploys.filter((d:{startedAt:string}) => {
+        try { return (new Date(d.startedAt).getDay()||7)-1===i; } catch { return false; }
+      }).length,
+    }));
+    return { servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity };
+  };
+
+  const loadFull = useCallback(async () => {
     try {
-      const safeJson = (r: Response) => r.json().catch(() => []);
-      const [rawServers, rawIncidents, rawDeploys, rawAuditLogs, rawUsers, rawUptime] = await Promise.all([
-        fetch("/api/servers").then(safeJson).catch(()=>[]),
-        fetch("/api/incidents").then(safeJson).catch(()=>[]),
-        fetch("/api/deploys").then(safeJson).catch(()=>[]),
-        fetch("/api/audit?limit=5").then(safeJson).catch(()=>[]),
-        fetch("/api/users").then(safeJson).catch(()=>[]),
-        fetch("/api/uptime?days=7").then(safeJson).catch(()=>[]),
-      ]);
-      if (cancelled.current) return;
-
-      // Guard: all must be arrays (API may return {error:...} on auth failure)
-      const servers   = Array.isArray(rawServers)   ? rawServers   : [];
-      const incidents = Array.isArray(rawIncidents) ? rawIncidents : [];
-      const deploys   = Array.isArray(rawDeploys)   ? rawDeploys   : [];
-      const auditLogs = Array.isArray(rawAuditLogs) ? rawAuditLogs : [];
-      const users     = Array.isArray(rawUsers)     ? rawUsers     : [];
-      const uptimeArr = Array.isArray(rawUptime)    ? rawUptime    : [];
-
-      const avgUptime = uptimeArr.length > 0
-        ? Math.round(uptimeArr.reduce((s:number,u:{uptimePercent:number})=>s+u.uptimePercent,0)/uptimeArr.length*10)/10
-        : 99.7;
-      const commitActivity = DAYS.map((label, i) => ({
-        label,
-        value: deploys.filter((d:{startedAt:string}) => {
-          try { const day=new Date(d.startedAt).getDay(); return (day===0?6:day-1)===i; } catch { return false; }
-        }).length,
-      }));
-
-      setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
+      const d = await fetchData();
+      setData(d);
       setLastUpdated(new Date());
-
-      if (servers[0]?.id) {
-        const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r=>r.json()).catch(()=>null);
-        if (!cancelled.current && Array.isArray(srv?.metrics) && srv.metrics.length > 1)
-          setData(prev => prev ? { ...prev, playerHistory: srv.metrics.map((m:{playersOnline:number})=>m.playersOnline) } : null);
+      if (d.servers[0]?.id) {
+        const srv = await fetch(`/api/servers/${d.servers[0].id}?range=24h`).then(r=>r.json()).catch(()=>null);
+        if (Array.isArray(srv?.metrics) && srv.metrics.length > 1)
+          setData(prev => prev ? { ...prev, playerHistory: srv.metrics.map((m:{playersOnline:number})=>m.playersOnline) } : prev);
       }
-    } catch (err) {
-      // Never leave user stuck in skeleton — set empty state so UI renders
-      if (!cancelled.current) {
-        console.error("[dashboard] loadFull failed:", err);
-        setData({ servers: [], incidents: [], deploys: [], auditLogs: [], users: [], playerHistory: [], uptimePercent: 0, commitActivity: [] });
-      }
+    } catch {
+      setData(prev => prev ?? { servers:[], incidents:[], deploys:[], auditLogs:[], users:[], playerHistory:[], uptimePercent:0, commitActivity:[] });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let retries=0, timeout: ReturnType<typeof setTimeout>, es: EventSource;
@@ -187,11 +183,8 @@ export default function DashboardPage() {
     return ()=>{ clearTimeout(timeout); es?.close(); setLive(false); };
   }, []);
 
-  useEffect(() => {
-    const c={current:false};
-    loadFull(c);
-    return ()=>{ c.current=true; };
-  }, [loadFull]);
+  // Load data on mount — no cancellation needed, setData on unmounted component is harmless in React 18
+  useEffect(() => { loadFull(); }, [loadFull]);
 
   // ── edit helpers ──────────────────────────────────────────────────────────
   const enterEdit  = () => { setDraft([...layout]); setEditMode(true); setSaved(false); };
@@ -460,7 +453,7 @@ export default function DashboardPage() {
           )}
           {!editMode && (
             <button
-              onClick={()=>{setRefreshing(true);const c={current:false};loadFull(c).finally(()=>setRefreshing(false));}}
+              onClick={()=>{setRefreshing(true);loadFull().finally(()=>setRefreshing(false));}}
               disabled={refreshing}
               className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors disabled:opacity-40"
             >
