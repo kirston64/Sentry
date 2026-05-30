@@ -102,8 +102,9 @@ export default function DashboardPage() {
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
 
-  const dragId   = useRef<string | null>(null);
-  const dragOver = useRef<string | null>(null);
+  const dragId = useRef<string | null>(null);
+  // {id, side} — which widget + which edge the cursor is closest to
+  const [dropTarget, setDropTarget] = useState<{ id: string; side: "before" | "after" } | null>(null);
 
   // ── load layout ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -211,28 +212,48 @@ export default function DashboardPage() {
     e.dataTransfer.effectAllowed = "move";
     requestAnimationFrame(() => { (e.target as HTMLElement).style.opacity = "0.4"; });
   };
+
   const onDragEnd = (e: React.DragEvent) => {
     (e.target as HTMLElement).style.opacity = "";
     dragId.current = null;
-    dragOver.current = null;
+    setDropTarget(null);
   };
+
   const onDragOver = (e: React.DragEvent, overId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    dragOver.current = overId;
+    if (dragId.current === overId) return;
+    // Determine left vs right half of the target element
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side: "before" | "after" = e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+    setDropTarget(prev =>
+      prev?.id === overId && prev?.side === side ? prev : { id: overId, side }
+    );
   };
+
+  const onDragLeave = (e: React.DragEvent) => {
+    // Only clear when truly leaving the widget (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDropTarget(null);
+    }
+  };
+
   const onDrop = (e: React.DragEvent, overId: string) => {
     e.preventDefault();
     const fromId = dragId.current;
-    if (!fromId || fromId===overId) return;
+    const side   = dropTarget?.side ?? "after";
+    setDropTarget(null);
+    if (!fromId || fromId === overId) return;
     setDraft(prev => {
-      const arr=[...prev];
-      const from=arr.findIndex(w=>w.id===fromId);
-      const to  =arr.findIndex(w=>w.id===overId);
-      if(from===-1||to===-1) return prev;
-      const [item]=arr.splice(from,1);
-      arr.splice(to,0,item);
-      return arr.map((w,i)=>({...w,order:i}));
+      const arr  = [...prev];
+      const from = arr.findIndex(w => w.id === fromId);
+      const to   = arr.findIndex(w => w.id === overId);
+      if (from === -1 || to === -1) return prev;
+      const [item] = arr.splice(from, 1);
+      // Recalculate 'to' index after removal
+      const newTo = arr.findIndex(w => w.id === overId);
+      arr.splice(side === "before" ? newTo : newTo + 1, 0, item);
+      return arr.map((w, i) => ({ ...w, order: i }));
     });
   };
 
@@ -487,16 +508,34 @@ export default function DashboardPage() {
           }
 
           // Edit mode wrapper
+          const showBefore = dropTarget?.id === w.id && dropTarget.side === "before";
+          const showAfter  = dropTarget?.id === w.id && dropTarget.side === "after";
+
           return (
             <div
               key={w.id}
-              className={clsx(colClass, "group")}
+              className={clsx(
+                colClass,
+                "group relative transition-all duration-150",
+                // Left / right drop indicators as border highlight
+                showBefore && "outline outline-2 outline-offset-2 outline-primary [outline-style:solid] [clip-path:inset(0_50%_0_0)]",
+                showAfter  && "outline outline-2 outline-offset-2 outline-primary [outline-style:solid] [clip-path:inset(0_0_0_50%)]",
+              )}
               draggable
               onDragStart={e => onDragStart(e, w.id)}
               onDragEnd={onDragEnd}
               onDragOver={e => onDragOver(e, w.id)}
+              onDragLeave={onDragLeave}
               onDrop={e => onDrop(e, w.id)}
             >
+              {/* Left drop line */}
+              {showBefore && (
+                <div className="pointer-events-none absolute -left-[3px] inset-y-0 w-[3px] rounded-full bg-primary z-20"/>
+              )}
+              {/* Right drop line */}
+              {showAfter && (
+                <div className="pointer-events-none absolute -right-[3px] inset-y-0 w-[3px] rounded-full bg-primary z-20"/>
+              )}
               <div className={clsx(
                 "rounded-lg border-2 transition-colors",
                 w.visible ? "border-primary/35" : "border-border/40 opacity-50"
