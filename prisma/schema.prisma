@@ -33,6 +33,8 @@ model User {
   updatedAt         DateTime  @updatedAt
 
   telegramChatId   String?
+  totpSecret       String?   // base32 TOTP secret
+  totpEnabled      Boolean   @default(false)
 
   sessions         Session[]
   loginOTPs        LoginOTP[]
@@ -45,10 +47,22 @@ model User {
   createdIncidents  Incident[]       @relation("IncidentCreator")
   deploys          Deploy[]
   auditLogs        AuditLog[]
+  approvedDeploys  Deploy[]          @relation("DeployApprover")
+  logAlertRules    LogAlertRule[]    @relation("AlertCreator")
+  vacationEntries  VacationEntry[]
   incidentEvents   IncidentEvent[]
   wikiArticles     WikiArticle[]   @relation("WikiAuthor")
+  runbooks         Runbook[]       @relation("RunbookAuthor")
+  onCallShifts     OnCallAssignment[] @relation("OnCallUser")
+  onCallCreated    OnCallAssignment[] @relation("OnCallCreator")
   aiChats          AIChat[]
   backups          Backup[]
+  teamMessages     TeamMessage[]
+  sentDMs          DirectMessage[] @relation("SentDMs")
+  receivedDMs      DirectMessage[] @relation("ReceivedDMs")
+  uploadedFiles    ChatAttachment[]  @relation("UploadedFiles")
+  messageReactions MessageReaction[]
+  dashboardLayout  DashboardLayout?
 }
 
 model Session {
@@ -152,6 +166,7 @@ model Server {
   metrics           ServerMetrics[]
   deploys           Deploy[]
   logs              LogEntry[]
+  logAlertRules     LogAlertRule[]
   uptimeChecks      UptimeCheck[]
   scheduledRestarts ScheduledRestart[]
   alertThreshold    AlertThreshold?
@@ -231,11 +246,15 @@ model Deploy {
   commitSha   String
   commitMsg   String
   logs        String    @default("[]") // JSON array of log lines
-  startedAt   DateTime  @default(now())
-  finishedAt  DateTime?
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  approvalStatus String?   // null=not needed, "pending", "approved", "rejected"
+  approvedBy     String?
+  approvedAt     DateTime?
 
-  server Server? @relation(fields: [serverId], references: [id])
-  user   User    @relation(fields: [triggeredBy], references: [id])
+  server   Server? @relation(fields: [serverId], references: [id])
+  user     User    @relation(fields: [triggeredBy], references: [id])
+  approver User?   @relation("DeployApprover", fields: [approvedBy], references: [id])
 }
 
 // ============ TASKS ============
@@ -415,4 +434,135 @@ model SystemLockdown {
   deactivatedBy   String?
   deactivaterName String?
   deactivatedAt   DateTime?
+}
+
+// ============ TEAM CHAT ============
+
+model TeamMessage {
+  id          String    @id @default(cuid())
+  content     String
+  userId      String
+  editedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  replyToId   String?
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  replyTo     TeamMessage?    @relation("TeamReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies     TeamMessage[]   @relation("TeamReplies")
+  attachments ChatAttachment[] @relation("TeamMsgAttachments")
+}
+
+model DirectMessage {
+  id          String    @id @default(cuid())
+  content     String
+  senderId    String
+  receiverId  String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  replyToId   String?
+
+  sender      User            @relation("SentDMs",     fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver    User            @relation("ReceivedDMs", fields: [receiverId], references: [id], onDelete: Cascade)
+  replyTo     DirectMessage?  @relation("DMReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies     DirectMessage[] @relation("DMReplies")
+  attachments ChatAttachment[] @relation("DMMsgAttachments")
+}
+
+model ChatAttachment {
+  id          String   @id @default(cuid())
+  fileName    String
+  storedName  String   @unique
+  mimeType    String
+  size        Int
+  uploadedBy  String
+  teamMsgId   String?
+  dmMsgId     String?
+  createdAt   DateTime @default(now())
+
+  uploader    User           @relation("UploadedFiles", fields: [uploadedBy], references: [id])
+  teamMessage TeamMessage?   @relation("TeamMsgAttachments", fields: [teamMsgId], references: [id], onDelete: Cascade)
+  directMsg   DirectMessage? @relation("DMMsgAttachments",   fields: [dmMsgId],   references: [id], onDelete: Cascade)
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  userId    String
+  msgId     String
+  msgType   String   // "team" | "dm"
+  createdAt DateTime @default(now())
+
+  @@unique([userId, msgId, emoji])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ RUNBOOKS ============
+
+model Runbook {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   // markdown
+  tags      String   @default("[]") // JSON array
+  authorId  String
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  author User @relation("RunbookAuthor", fields: [authorId], references: [id])
+}
+
+// ============ LOG ALERT RULES ============
+
+model LogAlertRule {
+  id        String   @id @default(cuid())
+  name      String
+  pattern   String   // regex or substring to match
+  level     String?  // null = any level; "error", "warn", etc.
+  serverId  String?  // null = all servers
+  enabled   Boolean  @default(true)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  server  Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  creator User    @relation("AlertCreator", fields: [createdBy], references: [id])
+}
+
+// ============ VACATION CALENDAR ============
+
+model VacationEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  startDate DateTime
+  endDate   DateTime
+  note      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ ON-CALL ============
+
+model OnCallAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  startAt   DateTime
+  endAt     DateTime
+  note      String?
+  createdBy String
+  createdAt DateTime @default(now())
+
+  user    User @relation("OnCallUser",    fields: [userId],    references: [id], onDelete: Cascade)
+  creator User @relation("OnCallCreator", fields: [createdBy], references: [id])
+}
+
+// ============ DASHBOARD LAYOUT ============
+
+model DashboardLayout {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  layout    String   // JSON: [{id: string, visible: boolean}]
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
