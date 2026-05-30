@@ -16,7 +16,7 @@ export async function POST(request: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          embeds: [{ title: "Sentry Dev-Ops Alert", description: message, color: 0xff4444, timestamp: new Date().toISOString() }],
+          embeds: [{ title: "Forge Dev-Ops Alert", description: message, color: 0xff4444, timestamp: new Date().toISOString() }],
         }),
       });
       results.discord = true;
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       await fetch(telegram.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: telegram.secret, text: `*Sentry Alert*\n${message}`, parse_mode: "Markdown" }),
+        body: JSON.stringify({ chat_id: telegram.secret, text: `*Forge Alert*\n${message}`, parse_mode: "Markdown" }),
       });
       results.telegram = true;
     } catch {

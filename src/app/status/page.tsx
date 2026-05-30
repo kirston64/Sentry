@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { StatusHeader } from "@/components/status/status-header";
-import { AlertTriangle, Users, RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import { AlertTriangle, Users, RefreshCw, CheckCircle, XCircle, Code, Copy, Check } from "lucide-react";
 
 interface ServerStatus {
   name: string;
@@ -137,7 +137,7 @@ export default function StatusPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Logo */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-neutral-100">Sentry RP</h1>
+          <h1 className="text-2xl font-bold text-neutral-100">Forge RP</h1>
           <p className="text-xs text-neutral-500 mt-1">System Status</p>
         </div>
 
@@ -268,9 +268,50 @@ export default function StatusPage() {
         </div>
 
         <p className="text-center text-[10px] text-neutral-600 pt-2">
-          Sentry RP Dev-Ops Dashboard
+          Forge RP Dev-Ops Dashboard
         </p>
+
+        {/* Embed code */}
+        <EmbedCode />
       </div>
+    </div>
+  );
+}
+
+function EmbedCode() {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://yoursite.com";
+  const code = `<iframe\n  src="${origin}/status"\n  width="100%"\n  height="600"\n  frameborder="0"\n  style="border-radius:12px;"\n  title="Server Status"\n></iframe>`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="border-t border-neutral-800 pt-4">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors mx-auto"
+      >
+        <Code className="h-3.5 w-3.5" />
+        {open ? "Скрыть embed-код" : "Вставить на сайт (embed)"}
+      </button>
+      {open && (
+        <div className="mt-3 relative">
+          <pre className="rounded-lg bg-neutral-900 border border-neutral-700 p-3 text-[11px] text-neutral-400 overflow-x-auto font-mono whitespace-pre-wrap">
+            {code}
+          </pre>
+          <button
+            onClick={copy}
+            className="absolute right-2 top-2 rounded border border-neutral-700 bg-neutral-800 p-1.5 text-neutral-400 hover:text-neutral-200 transition-colors"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

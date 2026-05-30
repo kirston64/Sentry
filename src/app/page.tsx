@@ -12,7 +12,7 @@ export default async function HomePage() {
       <div className="flex items-center gap-3">
         <Shield className="h-10 w-10 text-primary" />
         <h1 className="text-3xl font-bold text-text-primary">
-          Sentry <span className="text-text-secondary font-normal">Dev-Ops</span>
+          Forge <span className="text-text-secondary font-normal">Dev-Ops</span>
         </h1>
       </div>
 

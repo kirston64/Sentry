@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       // If user has their own Telegram, send there too
       if (targetUser.telegramChatId && targetUser.telegramChatId !== String(chatId)) {
         await sendMessage(targetUser.telegramChatId,
-          `🔐 <b>Ваш код входа в Sentry</b>\n\n` +
+          `🔐 <b>Ваш код входа в Forge</b>\n\n` +
           `Код: <b><code>${code}</code></b>\n\n` +
           `⏱ Действует 5 минут. Никому не передавайте.`
         );
@@ -319,7 +319,7 @@ export async function POST(request: Request) {
     // Update /start help
     if (command === "/start") {
       await sendMessage(chatId,
-        `👋 <b>Sentry DevOps Bot</b>\n\n` +
+        `👋 <b>Forge DevOps Bot</b>\n\n` +
         `Команды:\n` +
         `• <code>/link username пароль</code> — привязать аккаунт\n` +
         `• <code>/me</code> — показать привязанный аккаунт\n` +

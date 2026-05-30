@@ -3,7 +3,7 @@ import { ToastProvider } from "@/components/ui/toast-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RP Dev-Ops Dashboard | Sentry",
+  title: "Forge | Dev-Ops Dashboard",
   description: "Development operations dashboard for GTA 5 RP project",
 };
 

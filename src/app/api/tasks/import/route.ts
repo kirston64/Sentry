@@ -41,7 +41,7 @@ Answer (JSON array only):`;
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
       "HTTP-Referer": "https://sentry-dashboard.local",
-      "X-Title": "Sentry Dashboard",
+      "X-Title": "Forge Dashboard",
     },
     body: JSON.stringify({
       model: "nvidia/nemotron-3-super-120b-a12b:free",

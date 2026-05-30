@@ -29,7 +29,7 @@ export async function sendOTPToUser(
   userChatId?: string | null
 ) {
   const text =
-    `🔐 <b>Код входа в Sentry</b>\n\n` +
+    `🔐 <b>Код входа в Forge</b>\n\n` +
     `Пользователь: <code>${username}</code>\n` +
     `Код: <b><code>${code}</code></b>\n\n` +
     `⏱ Действует 5 минут. Никому не передавайте.`;
@@ -74,7 +74,7 @@ export async function sendCriticalAlert(
     `🚨 <b>${title}</b>\n\n` +
     `${body}` +
     (extra ? `\n\n${extra}` : "") +
-    `\n\n<i>Sentry DevOps · ${new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}</i>`;
+    `\n\n<i>Forge DevOps · ${new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })}</i>`;
 
   await Promise.allSettled(
     recipients

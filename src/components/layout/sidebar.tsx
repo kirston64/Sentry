@@ -25,6 +25,11 @@ import {
   CalendarClock,
   HardDrive,
   BookOpen,
+  BookMarked,
+  MessageSquare,
+  ClipboardList,
+  BarChart3,
+  Bell,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "./notification-bell";
@@ -48,10 +53,15 @@ const navItems: NavItem[] = [
   { href: "/deploys", label: "Deploys", icon: Rocket },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
   { href: "/logs", label: "Logs", icon: ScrollText },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/ai", label: "OpenRouter", icon: Sparkles },
   { href: "/schedule", label: "Schedule", icon: CalendarClock, minRole: "admin" },
   { href: "/backups", label: "Backups", icon: HardDrive },
   { href: "/changelog", label: "Changelog", icon: BookOpen },
+  { href: "/wiki", label: "Wiki", icon: BookMarked },
+  { href: "/runbooks", label: "Runbooks", icon: ClipboardList },
+  { href: "/reports", label: "SLA Reports", icon: BarChart3, minRole: "admin" },
+  { href: "/log-alerts", label: "Log Alerts", icon: Bell, minRole: "admin" },
   { href: "/activity", label: "Activity", icon: Activity, minRole: "admin" },
   { href: "/console", label: "Console", icon: TerminalSquare },
   { href: "/settings", label: "Settings", icon: Settings, minRole: "admin" },
@@ -82,9 +92,10 @@ export function Sidebar({ profile }: { profile: Profile }) {
   useEffect(() => {
     async function fetchAlerts() {
       try {
-        const [serversRes, incidentsRes] = await Promise.all([
+        const [serversRes, incidentsRes, dmsRes] = await Promise.all([
           fetch("/api/servers"),
           fetch("/api/incidents"),
+          fetch("/api/direct-messages"),
         ]);
         const map: Record<string, number> = {};
         if (serversRes.ok) {
@@ -97,11 +108,20 @@ export function Sidebar({ profile }: { profile: Profile }) {
           const active = incidents.filter((i: { status: string }) => i.status !== "resolved").length;
           if (active) map["/incidents"] = active;
         }
+        if (dmsRes.ok) {
+          const convos = await dmsRes.json();
+          const unread = Array.isArray(convos)
+            ? convos.reduce((sum: number, c: { unreadCount: number }) => sum + (c.unreadCount ?? 0), 0)
+            : 0;
+          if (unread) map["/chat"] = unread;
+        }
         setAlerts(map);
       } catch { /* ignore */ }
     }
     fetchAlerts();
-  }, []);
+    const interval = setInterval(fetchAlerts, 10_000);
+    return () => clearInterval(interval);
+  }, [profile.id]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -113,7 +133,7 @@ export function Sidebar({ profile }: { profile: Profile }) {
     <aside className="flex h-screen w-56 flex-col border-r border-border bg-surface">
       <div className="flex items-center gap-2 border-b border-border px-4 py-4">
         <Shield className="h-6 w-6 text-primary" />
-        <span className="text-sm font-bold text-text-primary">Sentry</span>
+        <span className="text-sm font-bold text-text-primary">Forge</span>
         <span className="ml-auto rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
           {profile.role}
         </span>

@@ -115,7 +115,7 @@ async function sendExternal(message: string) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          embeds: [{ title: "Sentry Dev-Ops", description: message, color: 0x007fd4, timestamp: new Date().toISOString() }],
+          embeds: [{ title: "Forge Dev-Ops", description: message, color: 0x007fd4, timestamp: new Date().toISOString() }],
         }),
       }).catch(() => {});
     }
@@ -125,7 +125,7 @@ async function sendExternal(message: string) {
       await fetch(telegram.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: telegram.secret, text: `*Sentry Dev-Ops*\n${message}`, parse_mode: "Markdown" }),
+        body: JSON.stringify({ chat_id: telegram.secret, text: `*Forge Dev-Ops*\n${message}`, parse_mode: "Markdown" }),
       }).catch(() => {});
     }
   } catch { /* silent */ }

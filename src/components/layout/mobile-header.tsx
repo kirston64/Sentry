@@ -14,7 +14,7 @@ export function MobileHeader({ profile }: { profile: Profile }) {
       <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-primary" />
-          <span className="text-sm font-bold text-text-primary">Sentry</span>
+          <span className="text-sm font-bold text-text-primary">Forge</span>
         </div>
         <button
           onClick={() => setOpen(!open)}
