@@ -18,12 +18,12 @@ import {
   Shield,
   LogOut,
   Command,
-  Lock,
   Sun,
   Moon,
   Sparkles,
   CalendarClock,
   HardDrive,
+  Timer,
   BookOpen,
   BookMarked,
   MessageSquare,
@@ -33,38 +33,39 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "./notification-bell";
-import { hasRole as hasRoleFn } from "@/lib/rbac";
+import { canViewSection, type AppSection } from "@/lib/rbac";
+import { parseSpecialties } from "@/lib/professions";
 import type { Profile } from "@/types/database";
-import type { UserRole } from "@/types/database";
 
 type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  minRole?: UserRole;
+  section: AppSection;
 };
 
 const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/servers", label: "Servers", icon: Server },
-  { href: "/repositories", label: "Repositories", icon: GitBranch },
-  { href: "/team", label: "Team", icon: Users },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare },
-  { href: "/deploys", label: "Deploys", icon: Rocket },
-  { href: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { href: "/logs", label: "Logs", icon: ScrollText },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/ai", label: "OpenRouter", icon: Sparkles },
-  { href: "/schedule", label: "Schedule", icon: CalendarClock, minRole: "admin" },
-  { href: "/backups", label: "Backups", icon: HardDrive },
-  { href: "/changelog", label: "Changelog", icon: BookOpen },
-  { href: "/wiki", label: "Wiki", icon: BookMarked },
-  { href: "/runbooks", label: "Runbooks", icon: ClipboardList },
-  { href: "/reports", label: "SLA Reports", icon: BarChart3, minRole: "admin" },
-  { href: "/log-alerts", label: "Log Alerts", icon: Bell, minRole: "admin" },
-  { href: "/activity", label: "Activity", icon: Activity, minRole: "admin" },
-  { href: "/console", label: "Console", icon: TerminalSquare },
-  { href: "/settings", label: "Settings", icon: Settings, minRole: "admin" },
+  { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard, section: "dashboard" },
+  { href: "/servers",      label: "Servers",      icon: Server,          section: "servers" },
+  { href: "/repositories", label: "Repositories", icon: GitBranch,       section: "repositories" },
+  { href: "/team",         label: "Team",         icon: Users,           section: "team" },
+  { href: "/tasks",        label: "Tasks",        icon: CheckSquare,     section: "tasks" },
+  { href: "/deploys",      label: "Deploys",      icon: Rocket,          section: "deploys" },
+  { href: "/incidents",    label: "Incidents",    icon: AlertTriangle,   section: "incidents" },
+  { href: "/logs",         label: "Logs",         icon: ScrollText,      section: "logs" },
+  { href: "/chat",         label: "Chat",         icon: MessageSquare,   section: "chat" },
+  { href: "/ai",           label: "OpenRouter",   icon: Sparkles,        section: "ai" },
+  { href: "/work",         label: "Work Time",    icon: Timer,           section: "work" },
+  { href: "/schedule",     label: "Schedule",     icon: CalendarClock,   section: "schedule" },
+  { href: "/backups",      label: "Backups",      icon: HardDrive,       section: "backups" },
+  { href: "/changelog",    label: "Changelog",    icon: BookOpen,        section: "changelog" },
+  { href: "/wiki",         label: "Wiki",         icon: BookMarked,      section: "wiki" },
+  { href: "/runbooks",     label: "Runbooks",     icon: ClipboardList,   section: "runbooks" },
+  { href: "/reports",      label: "SLA Reports",  icon: BarChart3,       section: "reports" },
+  { href: "/log-alerts",   label: "Log Alerts",   icon: Bell,            section: "log-alerts" },
+  { href: "/activity",     label: "Activity",     icon: Activity,        section: "activity" },
+  { href: "/console",      label: "Console",      icon: TerminalSquare,  section: "console" },
+  { href: "/settings",     label: "Settings",     icon: Settings,        section: "settings" },
 ];
 
 export function Sidebar({ profile }: { profile: Profile }) {
@@ -140,45 +141,33 @@ export function Sidebar({ profile }: { profile: Profile }) {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-        {navItems.map(({ href, label, icon: Icon, minRole }) => {
-          const locked = minRole && !hasRoleFn(profile.role, minRole);
-          const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
-
-          if (locked) {
+        {navItems
+          .filter(({ section }) =>
+            canViewSection(profile.role, parseSpecialties(profile.specialties ?? "[]"), section)
+          )
+          .map(({ href, label, icon: Icon }) => {
+            const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
-              <div
+              <Link
                 key={href}
-                className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-text-muted/40 cursor-not-allowed"
-                title={`Требуется роль: ${minRole}`}
+                href={href}
+                className={clsx(
+                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+                  isActive
+                    ? "bg-surface-hover text-text-primary"
+                    : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+                )}
               >
                 <Icon className="h-4 w-4" />
                 {label}
-                <Lock className="ml-auto h-3 w-3" />
-              </div>
+                {alerts[href] && (
+                  <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold text-white animate-alert-pulse pointer-events-none">
+                    {alerts[href]}
+                  </span>
+                )}
+              </Link>
             );
-          }
-
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={clsx(
-                "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-surface-hover text-text-primary"
-                  : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-              {alerts[href] && (
-                <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold text-white animate-alert-pulse pointer-events-none">
-                  {alerts[href]}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+          })}
       </nav>
 
       <div className="border-t border-border px-2 py-2">

@@ -1,57 +1,40 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Clock, Play, Square, Coffee, ArrowRight, Users } from "lucide-react";
+import { Clock, Play, Square, Coffee, ArrowRight, ExternalLink } from "lucide-react";
 import { clsx } from "clsx";
 import { useProfile } from "@/components/auth/profile-context";
 import { hasRole } from "@/lib/rbac";
+import Link from "next/link";
 
 interface WorkBreak { id: string; startedAt: string; endedAt: string | null }
 interface WorkSession {
-  id: string;
-  userId: string;
-  startedAt: string;
-  endedAt: string | null;
+  id: string; userId: string; date: string;
+  startedAt: string; endedAt: string | null;
   status: "working" | "on_break" | "ended";
   breaks: WorkBreak[];
 }
 
-interface UserStat {
-  user: { id: string; username: string; fullName: string; role: string };
+interface ActiveUser {
+  user: { id: string; username: string; fullName: string };
+  activeSession: WorkSession | null;
   totalMin: number;
-  breakMin: number;
-  days: number;
-  sessions: (WorkSession & { workedMin: number; breakMin: number })[];
 }
 
 function fmtMin(min: number) {
+  if (min <= 0) return "0м";
   if (min < 60) return `${min}м`;
-  return `${Math.floor(min / 60)}ч ${min % 60}м`;
+  return `${Math.floor(min / 60)}ч ${min % 60 > 0 ? `${min % 60}м` : ""}`.trim();
 }
 
-function useTick() {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-}
-
-function calcWorked(session: WorkSession): number {
-  const end = session.endedAt ? new Date(session.endedAt) : new Date();
-  const totalMs = end.getTime() - new Date(session.startedAt).getTime();
-  const breakMs = session.breaks.reduce((acc, b) => {
+function calcWorked(s: WorkSession): number {
+  const end = s.endedAt ? new Date(s.endedAt) : new Date();
+  const totalMs = end.getTime() - new Date(s.startedAt).getTime();
+  const breakMs = s.breaks.reduce((acc, b) => {
     const bEnd = b.endedAt ? new Date(b.endedAt) : new Date();
     return acc + (bEnd.getTime() - new Date(b.startedAt).getTime());
   }, 0);
   return Math.max(0, Math.round((totalMs - breakMs) / 60000));
-}
-
-function calcBreak(session: WorkSession): number {
-  return Math.round(session.breaks.reduce((acc, b) => {
-    const bEnd = b.endedAt ? new Date(b.endedAt) : new Date();
-    return acc + (bEnd.getTime() - new Date(b.startedAt).getTime());
-  }, 0) / 60000);
 }
 
 export function WorkTimer() {
@@ -59,178 +42,158 @@ export function WorkTimer() {
   const isAdmin = hasRole(profile.role, "admin");
 
   const [session, setSession] = useState<WorkSession | null | undefined>(undefined);
+  const [team, setTeam] = useState<ActiveUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState<UserStat[]>([]);
-  const [showStats, setShowStats] = useState(false);
+  const [tick, setTick] = useState(0);
 
-  useTick(); // re-render every second for live timer
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  void tick;
 
   const fetchSession = useCallback(async () => {
     const r = await fetch("/api/work/session");
-    const d = await r.json();
-    setSession(d);
+    setSession(r.ok ? await r.json() : null);
   }, []);
 
-  const fetchStats = useCallback(async () => {
-    const r = await fetch("/api/work/stats?days=7");
-    const d = await r.json();
-    setStats(d.users ?? []);
-  }, []);
+  const fetchTeam = useCallback(async () => {
+    if (!isAdmin) return;
+    const r = await fetch("/api/work/stats?days=1");
+    if (r.ok) {
+      const d = await r.json();
+      setTeam(d.users ?? []);
+    }
+  }, [isAdmin]);
 
-  useEffect(() => { fetchSession(); }, [fetchSession]);
-  useEffect(() => { if (isAdmin && showStats) fetchStats(); }, [isAdmin, showStats, fetchStats]);
+  useEffect(() => { fetchSession(); fetchTeam(); }, [fetchSession, fetchTeam]);
 
-  const action = async (act: string) => {
+  const doAction = async (action: string) => {
     setLoading(true);
     try {
       const r = await fetch("/api/work/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: act }),
+        body: JSON.stringify({ action }),
       });
-      const d = await r.json();
-      if (r.ok) setSession(d);
-    } finally {
-      setLoading(false);
-    }
+      if (r.ok) { setSession(await r.json()); fetchTeam(); }
+    } finally { setLoading(false); }
   };
 
   if (session === undefined) {
     return (
-      <div className="rounded-lg border border-border bg-surface p-4">
-        <div className="h-4 w-24 animate-pulse rounded bg-surface-hover mb-3"/>
-        <div className="h-8 w-32 animate-pulse rounded bg-surface-hover"/>
+      <div className="rounded-lg border border-border bg-surface p-4 space-y-2">
+        <div className="h-4 w-28 animate-pulse rounded bg-surface-hover" />
+        <div className="h-8 w-20 animate-pulse rounded bg-surface-hover" />
       </div>
     );
   }
 
   const workedMin = session && session.status !== "ended" ? calcWorked(session) : 0;
-  const breakMin  = session && session.status !== "ended" ? calcBreak(session) : 0;
+  const active    = session && session.status !== "ended";
+  const onBreak   = session?.status === "on_break";
+
+  const today = new Date().toISOString().slice(0, 10);
+  const onlineTeam = isAdmin ? team.filter(u =>
+    u.activeSession && u.activeSession.status !== "ended"
+  ) : [];
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4 space-y-3">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-text-muted"/>
+          <Clock className="h-4 w-4 text-text-muted" />
           <span className="text-sm font-medium text-text-primary">Рабочее время</span>
         </div>
-        {isAdmin && (
-          <button
-            onClick={() => setShowStats(v => !v)}
-            className="text-[10px] text-primary hover:underline flex items-center gap-1"
-          >
-            <Users className="h-3 w-3"/> Команда
-          </button>
-        )}
+        <Link href="/work" className="text-text-muted hover:text-primary transition-colors">
+          <ExternalLink className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
-      {/* Status + timer */}
-      {!session || session.status === "ended" ? (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-muted">Смена не начата</span>
-          <button
-            onClick={() => action("start")}
-            disabled={loading}
-            className="flex items-center gap-1.5 rounded bg-success px-3 py-1.5 text-xs font-medium text-white hover:bg-success/80 disabled:opacity-50 transition-colors"
-          >
-            <Play className="h-3.5 w-3.5"/> Начать работу
-          </button>
+      {/* Timer */}
+      <div className="flex items-center gap-3">
+        <div>
+          <p className={clsx(
+            "text-2xl font-bold tabular-nums",
+            !active ? "text-text-muted" : onBreak ? "text-warning" : "text-success"
+          )}>
+            {fmtMin(workedMin)}
+          </p>
+          <p className="text-[10px] text-text-muted mt-0.5">
+            {!active ? "смена не начата" : onBreak ? "на перерыве" : "отработано"}
+          </p>
         </div>
-      ) : (
-        <div className="space-y-2">
-          {/* Live counters */}
-          <div className="flex items-center gap-4">
-            <div className="text-center">
-              <p className={clsx("text-xl font-bold tabular-nums", session.status === "on_break" ? "text-text-muted" : "text-success")}>
-                {fmtMin(workedMin)}
-              </p>
-              <p className="text-[10px] text-text-muted">работа</p>
-            </div>
-            {breakMin > 0 && (
-              <div className="text-center">
-                <p className="text-xl font-bold tabular-nums text-warning">{fmtMin(breakMin)}</p>
-                <p className="text-[10px] text-text-muted">перерыв</p>
-              </div>
-            )}
-            <div className={clsx(
-              "ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              session.status === "working"  ? "bg-success/15 text-success" :
-              session.status === "on_break" ? "bg-warning/15 text-warning" : ""
-            )}>
-              {session.status === "working" ? "● Работает" : "○ Перерыв"}
-            </div>
-          </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            {session.status === "working" ? (
-              <>
-                <button
-                  onClick={() => action("break_start")}
-                  disabled={loading}
-                  className="flex items-center gap-1 rounded border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs text-warning hover:bg-warning/20 disabled:opacity-50 transition-colors"
-                >
-                  <Coffee className="h-3.5 w-3.5"/> Перерыв
-                </button>
-                <button
-                  onClick={() => action("end")}
-                  disabled={loading}
-                  className="flex items-center gap-1 rounded border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-50 transition-colors"
-                >
-                  <Square className="h-3.5 w-3.5"/> Закончить
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => action("break_end")}
-                  disabled={loading}
-                  className="flex items-center gap-1 rounded bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary/80 disabled:opacity-50 transition-colors"
-                >
-                  <ArrowRight className="h-3.5 w-3.5"/> Продолжить
-                </button>
-                <button
-                  onClick={() => action("end")}
-                  disabled={loading}
-                  className="flex items-center gap-1 rounded border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-50 transition-colors"
-                >
-                  <Square className="h-3.5 w-3.5"/> Закончить
-                </button>
-              </>
-            )}
-          </div>
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5 ml-auto">
+          {!active && (
+            <button onClick={() => doAction("start")} disabled={loading}
+              className="flex items-center gap-1 rounded-lg bg-success px-2.5 py-1.5 text-xs font-medium text-white hover:bg-success/80 disabled:opacity-50 transition-colors">
+              <Play className="h-3.5 w-3.5" /> Начать
+            </button>
+          )}
+          {active && !onBreak && (
+            <>
+              <button onClick={() => doAction("break_start")} disabled={loading}
+                className="rounded border border-warning/40 bg-warning/10 p-1.5 text-warning hover:bg-warning/20 disabled:opacity-50 transition-colors"
+                title="Перерыв">
+                <Coffee className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={() => doAction("end")} disabled={loading}
+                className="rounded border border-border p-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50 transition-colors"
+                title="Закончить день">
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+          {onBreak && (
+            <>
+              <button onClick={() => doAction("break_end")} disabled={loading}
+                className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white hover:bg-primary/80 disabled:opacity-50 transition-colors">
+                <ArrowRight className="h-3.5 w-3.5" /> Продолжить
+              </button>
+              <button onClick={() => doAction("end")} disabled={loading}
+                className="rounded border border-border p-1.5 text-text-secondary hover:bg-surface-hover disabled:opacity-50 transition-colors"
+                title="Закончить день">
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Admin: team stats */}
-      {isAdmin && showStats && stats.length > 0 && (
-        <div className="border-t border-border pt-3 space-y-2">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-text-muted">Команда сегодня</p>
-          {stats.map(u => {
-            const todaySessions = u.sessions.filter((s: WorkSession & { workedMin: number; breakMin: number; date?: string }) => s.date === new Date().toISOString().slice(0, 10));
-            const todayMin = todaySessions.reduce((a, s) => a + s.workedMin, 0);
-            const active = todaySessions.find(s => s.status !== "ended");
+      {/* Team online (admin only) */}
+      {isAdmin && onlineTeam.length > 0 && (
+        <div className="border-t border-border pt-2.5 space-y-1.5">
+          <p className="text-[10px] text-text-muted font-medium uppercase tracking-wide">
+            Работают сейчас ({onlineTeam.length})
+          </p>
+          {onlineTeam.slice(0, 4).map(u => {
+            const min = u.activeSession ? calcWorked(u.activeSession) : 0;
+            const todayTotal = (u as { byDay?: Record<string, { workedMin: number }> }).byDay?.[today]?.workedMin ?? min;
             return (
               <div key={u.user.id} className="flex items-center gap-2 text-xs">
                 <div className={clsx(
                   "h-1.5 w-1.5 rounded-full shrink-0",
-                  !active ? "bg-text-muted/30" :
-                  active.status === "working" ? "bg-success animate-pulse" : "bg-warning"
-                )}/>
+                  u.activeSession?.status === "on_break" ? "bg-warning" : "bg-success animate-pulse"
+                )} />
                 <span className="flex-1 text-text-secondary truncate">
                   {u.user.fullName || u.user.username}
                 </span>
                 <span className={clsx(
-                  "font-medium tabular-nums",
-                  active?.status === "working" ? "text-success" :
-                  active?.status === "on_break" ? "text-warning" : "text-text-muted"
+                  "tabular-nums font-medium",
+                  u.activeSession?.status === "on_break" ? "text-warning" : "text-success"
                 )}>
-                  {todayMin > 0 ? fmtMin(todayMin) : "—"}
+                  {fmtMin(todayTotal || min)}
                 </span>
               </div>
             );
           })}
+          {onlineTeam.length > 4 && (
+            <p className="text-[10px] text-text-muted">+{onlineTeam.length - 4} ещё</p>
+          )}
         </div>
       )}
     </div>
