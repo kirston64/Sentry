@@ -128,32 +128,50 @@ export default function DashboardPage() {
 
   // ── data loading ─────────────────────────────────────────────────────────────
   const loadFull = useCallback(async (cancelled: { current: boolean }) => {
-    const [servers, incidents, deploys, auditLogs, users, uptime] = await Promise.all([
-      fetch("/api/servers").then(r=>r.json()).catch(()=>[]),
-      fetch("/api/incidents").then(r=>r.json()).catch(()=>[]),
-      fetch("/api/deploys").then(r=>r.json()).catch(()=>[]),
-      fetch("/api/audit?limit=5").then(r=>r.json()).catch(()=>[]),
-      fetch("/api/users").then(r=>r.json()).catch(()=>[]),
-      fetch("/api/uptime?days=7").then(r=>r.json()).catch(()=>[]),
-    ]);
-    if (cancelled.current) return;
+    try {
+      const safeJson = (r: Response) => r.json().catch(() => []);
+      const [rawServers, rawIncidents, rawDeploys, rawAuditLogs, rawUsers, rawUptime] = await Promise.all([
+        fetch("/api/servers").then(safeJson).catch(()=>[]),
+        fetch("/api/incidents").then(safeJson).catch(()=>[]),
+        fetch("/api/deploys").then(safeJson).catch(()=>[]),
+        fetch("/api/audit?limit=5").then(safeJson).catch(()=>[]),
+        fetch("/api/users").then(safeJson).catch(()=>[]),
+        fetch("/api/uptime?days=7").then(safeJson).catch(()=>[]),
+      ]);
+      if (cancelled.current) return;
 
-    const uptimeArr = Array.isArray(uptime) ? uptime : [];
-    const avgUptime = uptimeArr.length > 0
-      ? Math.round(uptimeArr.reduce((s:number,u:{uptimePercent:number})=>s+u.uptimePercent,0)/uptimeArr.length*10)/10
-      : 99.7;
-    const commitActivity = DAYS.map((label,i) => ({
-      label,
-      value: deploys.filter((d:{startedAt:string})=>{const day=new Date(d.startedAt).getDay();return(day===0?6:day-1)===i;}).length,
-    }));
+      // Guard: all must be arrays (API may return {error:...} on auth failure)
+      const servers   = Array.isArray(rawServers)   ? rawServers   : [];
+      const incidents = Array.isArray(rawIncidents) ? rawIncidents : [];
+      const deploys   = Array.isArray(rawDeploys)   ? rawDeploys   : [];
+      const auditLogs = Array.isArray(rawAuditLogs) ? rawAuditLogs : [];
+      const users     = Array.isArray(rawUsers)     ? rawUsers     : [];
+      const uptimeArr = Array.isArray(rawUptime)    ? rawUptime    : [];
 
-    setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
-    setLastUpdated(new Date());
+      const avgUptime = uptimeArr.length > 0
+        ? Math.round(uptimeArr.reduce((s:number,u:{uptimePercent:number})=>s+u.uptimePercent,0)/uptimeArr.length*10)/10
+        : 99.7;
+      const commitActivity = DAYS.map((label, i) => ({
+        label,
+        value: deploys.filter((d:{startedAt:string}) => {
+          try { const day=new Date(d.startedAt).getDay(); return (day===0?6:day-1)===i; } catch { return false; }
+        }).length,
+      }));
 
-    if (servers[0]?.id) {
-      const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r=>r.json()).catch(()=>null);
-      if (!cancelled.current && srv?.metrics?.length>1)
-        setData(prev => prev ? { ...prev, playerHistory: srv.metrics.map((m:{playersOnline:number})=>m.playersOnline) } : null);
+      setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
+      setLastUpdated(new Date());
+
+      if (servers[0]?.id) {
+        const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r=>r.json()).catch(()=>null);
+        if (!cancelled.current && Array.isArray(srv?.metrics) && srv.metrics.length > 1)
+          setData(prev => prev ? { ...prev, playerHistory: srv.metrics.map((m:{playersOnline:number})=>m.playersOnline) } : null);
+      }
+    } catch (err) {
+      // Never leave user stuck in skeleton — set empty state so UI renders
+      if (!cancelled.current) {
+        console.error("[dashboard] loadFull failed:", err);
+        setData({ servers: [], incidents: [], deploys: [], auditLogs: [], users: [], playerHistory: [], uptimePercent: 0, commitActivity: [] });
+      }
     }
   }, []);
 
