@@ -15,12 +15,12 @@ import { hasRole } from "@/lib/rbac";
 import {
   Server, AlertCircle, GitPullRequest, Users, Activity, AlertTriangle,
   Rocket, XCircle, RefreshCw, Settings2, Eye, EyeOff, GripVertical,
-  Save, X, Check,
+  Save, X, Check, Maximize2, Minus,
 } from "lucide-react";
 import Link from "next/link";
 import { clsx } from "clsx";
 
-// ─── Widget registry ─────────────────────────────────────────────────────────
+// ─── Widget registry ──────────────────────────────────────────────────────────
 
 interface WidgetMeta {
   id: string;
@@ -29,23 +29,40 @@ interface WidgetMeta {
 }
 
 const WIDGET_REGISTRY: WidgetMeta[] = [
-  { id: "problems",          label: "Блок проблем",      minRole: null  },
-  { id: "stat_cards",        label: "Статистика",         minRole: null  },
-  { id: "servers",           label: "Серверы",            minRole: null  },
-  { id: "quick_actions",     label: "Быстрые действия",   minRole: null  },
-  { id: "charts",            label: "Графики",            minRole: null  },
-  { id: "oncall",            label: "Дежурство",          minRole: null  },
-  { id: "deploys_summary",   label: "Сводка деплоев",     minRole: null  },
-  { id: "incidents_summary", label: "Сводка инцидентов",  minRole: null  },
+  { id: "problems",          label: "Блок проблем",      minRole: null    },
+  { id: "stat_cards",        label: "Статистика",         minRole: null    },
+  { id: "servers",           label: "Серверы",            minRole: null    },
+  { id: "quick_actions",     label: "Быстрые действия",   minRole: null    },
+  { id: "charts",            label: "Графики",            minRole: null    },
+  { id: "oncall",            label: "Дежурство",          minRole: null    },
+  { id: "deploys_summary",   label: "Сводка деплоев",     minRole: null    },
+  { id: "incidents_summary", label: "Сводка инцидентов",  minRole: null    },
   { id: "failed_logins",     label: "Неудачные входы",    minRole: "admin" },
   { id: "activity",          label: "Аудит / Активность", minRole: "admin" },
 ];
 
-interface WidgetItem { id: string; visible: boolean; order: number }
+// cols: 12=full, 6=half, 4=third
+// compact: reduced max-height
+interface WidgetItem {
+  id: string;
+  visible: boolean;
+  order: number;
+  cols: 12 | 6 | 4;
+  compact: boolean;
+}
 
-const DEFAULT_LAYOUT: WidgetItem[] = WIDGET_REGISTRY.map((w, i) => ({
-  id: w.id, visible: true, order: i,
-}));
+const DEFAULT_LAYOUT: WidgetItem[] = [
+  { id: "problems",          visible: true, order: 0, cols: 12, compact: false },
+  { id: "stat_cards",        visible: true, order: 1, cols: 12, compact: false },
+  { id: "servers",           visible: true, order: 2, cols: 12, compact: false },
+  { id: "quick_actions",     visible: true, order: 3, cols: 12, compact: false },
+  { id: "charts",            visible: true, order: 4, cols: 12, compact: false },
+  { id: "oncall",            visible: true, order: 5, cols: 6,  compact: false },
+  { id: "deploys_summary",   visible: true, order: 6, cols: 6,  compact: false },
+  { id: "incidents_summary", visible: true, order: 7, cols: 6,  compact: false },
+  { id: "failed_logins",     visible: true, order: 8, cols: 12, compact: false },
+  { id: "activity",          visible: true, order: 9, cols: 12, compact: false },
+];
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 
@@ -55,52 +72,60 @@ interface DashboardData {
   deploys:   { id: string; version: string; environment: string; status: string; commitMsg: string; startedAt: string }[];
   auditLogs: { id: string; action: string; target: string; createdAt: string; user: { username: string; fullName: string } }[];
   users:     { id: string }[];
-  playerHistory:   number[];
-  uptimePercent:   number;
-  commitActivity:  { label: string; value: number }[];
+  playerHistory:  number[];
+  uptimePercent:  number;
+  commitActivity: { label: string; value: number }[];
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => `${i}:00`);
 const DAYS  = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 
+// grid col-span classes (Tailwind needs full strings, not dynamic)
+const COL_CLASS: Record<number, string> = {
+  12: "col-span-12",
+  6:  "col-span-12 md:col-span-6",
+  4:  "col-span-12 md:col-span-4",
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const profile  = useProfile();
+  const profile = useProfile();
   const [data,        setData]        = useState<DashboardData | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing,  setRefreshing]  = useState(false);
   const [live,        setLive]        = useState(false);
 
-  // layout
-  const [layout,      setLayout]      = useState<WidgetItem[]>(DEFAULT_LAYOUT);
-  const [editMode,    setEditMode]    = useState(false);
-  const [draft,       setDraft]       = useState<WidgetItem[]>([]);
-  const [saving,      setSaving]      = useState(false);
-  const [saved,       setSaved]       = useState(false);
+  const [layout,   setLayout]   = useState<WidgetItem[]>(DEFAULT_LAYOUT);
+  const [editMode, setEditMode] = useState(false);
+  const [draft,    setDraft]    = useState<WidgetItem[]>([]);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
 
-  // dnd state
   const dragId   = useRef<string | null>(null);
   const dragOver = useRef<string | null>(null);
 
-  // ── load saved layout ───────────────────────────────────────────────────────
+  // ── load layout ─────────────────────────────────────────────────────────────
   useEffect(() => {
     fetch("/api/me/dashboard-layout")
       .then(r => r.json())
-      .then((saved: WidgetItem[] | null) => {
-        if (!Array.isArray(saved)) return;
+      .then((remote: WidgetItem[] | null) => {
+        if (!Array.isArray(remote)) return;
         const merged = [
-          ...saved,
-          ...DEFAULT_LAYOUT
-            .filter(d => !saved.find(s => s.id === d.id))
-            .map((d, i) => ({ ...d, order: saved.length + i })),
+          ...remote.map(w => ({
+            ...w,
+            cols: (([4,6,12].includes(w.cols) ? w.cols : 12) as 12|6|4),
+            compact: w.compact ?? false,
+          })),
+          ...DEFAULT_LAYOUT.filter(d => !remote.find(s => s.id === d.id))
+            .map((d, i) => ({ ...d, order: remote.length + i })),
         ].sort((a, b) => a.order - b.order);
         setLayout(merged);
       })
       .catch(() => {});
   }, []);
 
-  // ── data loading ────────────────────────────────────────────────────────────
+  // ── data loading ─────────────────────────────────────────────────────────────
   const loadFull = useCallback(async (cancelled: { current: boolean }) => {
     const [servers, incidents, deploys, auditLogs, users, uptime] = await Promise.all([
       fetch("/api/servers").then(r=>r.json()).catch(()=>[]),
@@ -114,14 +139,11 @@ export default function DashboardPage() {
 
     const uptimeArr = Array.isArray(uptime) ? uptime : [];
     const avgUptime = uptimeArr.length > 0
-      ? Math.round(uptimeArr.reduce((s:number, u:{uptimePercent:number}) => s + u.uptimePercent, 0) / uptimeArr.length * 10) / 10
+      ? Math.round(uptimeArr.reduce((s:number,u:{uptimePercent:number})=>s+u.uptimePercent,0)/uptimeArr.length*10)/10
       : 99.7;
-    const commitActivity = DAYS.map((label, i) => ({
+    const commitActivity = DAYS.map((label,i) => ({
       label,
-      value: deploys.filter((d:{startedAt:string}) => {
-        const day = new Date(d.startedAt).getDay();
-        return (day===0?6:day-1) === i;
-      }).length,
+      value: deploys.filter((d:{startedAt:string})=>{const day=new Date(d.startedAt).getDay();return(day===0?6:day-1)===i;}).length,
     }));
 
     setData({ servers, incidents, deploys, auditLogs, users, playerHistory: [], uptimePercent: avgUptime, commitActivity });
@@ -129,7 +151,7 @@ export default function DashboardPage() {
 
     if (servers[0]?.id) {
       const srv = await fetch(`/api/servers/${servers[0].id}?range=24h`).then(r=>r.json()).catch(()=>null);
-      if (!cancelled.current && srv?.metrics?.length > 1)
+      if (!cancelled.current && srv?.metrics?.length>1)
         setData(prev => prev ? { ...prev, playerHistory: srv.metrics.map((m:{playersOnline:number})=>m.playersOnline) } : null);
     }
   }, []);
@@ -140,20 +162,20 @@ export default function DashboardPage() {
       es = new EventSource("/api/dashboard/stream");
       es.onopen  = () => { setLive(true); retries=0; };
       es.onerror = () => { setLive(false); es.close(); if(retries<5){const d=Math.min(1000*2**retries,30000);retries++;timeout=setTimeout(connect,d);} };
-      es.onmessage = (ev) => { try { const p=JSON.parse(ev.data); setLastUpdated(new Date()); setData(prev=>prev?{...prev,servers:p.servers??prev.servers,incidents:p.incidents??prev.incidents,deploys:p.deploys??prev.deploys}:prev); } catch{/**/} };
+      es.onmessage = (ev) => { try{ const p=JSON.parse(ev.data); setLastUpdated(new Date()); setData(prev=>prev?{...prev,servers:p.servers??prev.servers,incidents:p.incidents??prev.incidents,deploys:p.deploys??prev.deploys}:prev); }catch{/**/} };
     }
     connect();
-    return () => { clearTimeout(timeout); es?.close(); setLive(false); };
+    return ()=>{ clearTimeout(timeout); es?.close(); setLive(false); };
   }, []);
 
   useEffect(() => {
-    const c = { current: false };
+    const c={current:false};
     loadFull(c);
-    return () => { c.current = true; };
+    return ()=>{ c.current=true; };
   }, [loadFull]);
 
-  // ── edit mode ───────────────────────────────────────────────────────────────
-  const enterEdit = () => { setDraft([...layout]); setEditMode(true); setSaved(false); };
+  // ── edit helpers ──────────────────────────────────────────────────────────
+  const enterEdit  = () => { setDraft([...layout]); setEditMode(true); setSaved(false); };
   const cancelEdit = () => { setEditMode(false); setDraft([]); };
 
   const saveLayout = async () => {
@@ -167,74 +189,69 @@ export default function DashboardPage() {
       setLayout([...draft]);
       setEditMode(false);
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } finally {
-      setSaving(false);
-    }
+      setTimeout(()=>setSaved(false), 2000);
+    } finally { setSaving(false); }
   };
 
   const toggleVisible = (id: string) =>
     setDraft(prev => prev.map(w => w.id===id ? { ...w, visible: !w.visible } : w));
 
-  const resetLayout = () =>
-    setDraft(DEFAULT_LAYOUT.map((w,i) => ({ ...w, order: i })));
+  const setCols = (id: string, cols: 12|6|4) =>
+    setDraft(prev => prev.map(w => w.id===id ? { ...w, cols } : w));
 
-  // ── drag & drop on widgets ──────────────────────────────────────────────────
+  const toggleCompact = (id: string) =>
+    setDraft(prev => prev.map(w => w.id===id ? { ...w, compact: !w.compact } : w));
+
+  const resetLayout = () =>
+    setDraft(DEFAULT_LAYOUT.map((w,i)=>({ ...w, order: i })));
+
+  // ── drag & drop ───────────────────────────────────────────────────────────
   const onDragStart = (e: React.DragEvent, id: string) => {
     dragId.current = id;
     e.dataTransfer.effectAllowed = "move";
-    // slight delay so the dragged element renders properly
-    requestAnimationFrame(() => {
-      (e.target as HTMLElement).style.opacity = "0.4";
-    });
+    requestAnimationFrame(() => { (e.target as HTMLElement).style.opacity = "0.4"; });
   };
-
   const onDragEnd = (e: React.DragEvent) => {
     (e.target as HTMLElement).style.opacity = "";
     dragId.current = null;
     dragOver.current = null;
   };
-
   const onDragOver = (e: React.DragEvent, overId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dragOver.current === overId) return;
     dragOver.current = overId;
   };
-
   const onDrop = (e: React.DragEvent, overId: string) => {
     e.preventDefault();
     const fromId = dragId.current;
-    if (!fromId || fromId === overId) return;
+    if (!fromId || fromId===overId) return;
     setDraft(prev => {
-      const arr = [...prev];
-      const from = arr.findIndex(w => w.id === fromId);
-      const to   = arr.findIndex(w => w.id === overId);
-      if (from === -1 || to === -1) return prev;
-      const [item] = arr.splice(from, 1);
-      arr.splice(to, 0, item);
-      return arr.map((w, i) => ({ ...w, order: i }));
+      const arr=[...prev];
+      const from=arr.findIndex(w=>w.id===fromId);
+      const to  =arr.findIndex(w=>w.id===overId);
+      if(from===-1||to===-1) return prev;
+      const [item]=arr.splice(from,1);
+      arr.splice(to,0,item);
+      return arr.map((w,i)=>({...w,order:i}));
     });
   };
 
-  // ── guards ──────────────────────────────────────────────────────────────────
+  // ── guards ────────────────────────────────────────────────────────────────
   if (!data) return <DashboardSkeleton />;
 
-  const onlineServers  = data.servers.filter(s=>s.status==="online").length;
-  const offlineServers = data.servers.filter(s=>s.status==="offline");
-  const failedDeploys  = data.deploys.filter(d=>d.status==="failed");
-  const activeIncidents= data.incidents.filter(i=>i.status!=="resolved");
-  const hasProblems    = offlineServers.length>0||failedDeploys.length>0||activeIncidents.length>0;
-  const playerData     = data.playerHistory.length>1 ? data.playerHistory : [];
+  const onlineServers   = data.servers.filter(s=>s.status==="online").length;
+  const offlineServers  = data.servers.filter(s=>s.status==="offline");
+  const failedDeploys   = data.deploys.filter(d=>d.status==="failed");
+  const activeIncidents = data.incidents.filter(i=>i.status!=="resolved");
+  const hasProblems     = offlineServers.length>0||failedDeploys.length>0||activeIncidents.length>0;
+  const playerData      = data.playerHistory.length>1 ? data.playerHistory : [];
 
-  const canSee = (meta: WidgetMeta | undefined) =>
+  const canSee = (meta: WidgetMeta|undefined) =>
     !!meta && (!meta.minRole || hasRole(profile.role, meta.minRole));
 
-  // current render list
-  const activeLayout = (editMode ? draft : layout)
-    .sort((a,b) => a.order - b.order);
+  const activeLayout = (editMode ? draft : layout).sort((a,b)=>a.order-b.order);
 
-  // ── widget content ──────────────────────────────────────────────────────────
+  // ── widget content ────────────────────────────────────────────────────────
   function widgetContent(id: string): React.ReactNode {
     if (!data) return null;
     switch (id) {
@@ -242,7 +259,7 @@ export default function DashboardPage() {
         return hasProblems ? (
           <div className="rounded-lg border border-error/40 bg-error/10 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-5 w-5 text-error" />
+              <AlertTriangle className="h-5 w-5 text-error"/>
               <h2 className="text-sm font-bold text-error">Обнаружены проблемы</h2>
             </div>
             <div className="space-y-2">
@@ -268,8 +285,7 @@ export default function DashboardPage() {
           </div>
         ) : null;
 
-      case "failed_logins":
-        return <FailedLoginsAlert />;
+      case "failed_logins": return <FailedLoginsAlert />;
 
       case "stat_cards":
         return (
@@ -281,11 +297,8 @@ export default function DashboardPage() {
           </div>
         );
 
-      case "servers":
-        return <ServerStatusWidget />;
-
-      case "quick_actions":
-        return <QuickActions />;
+      case "servers": return <ServerStatusWidget />;
+      case "quick_actions": return <QuickActions />;
 
       case "charts":
         return (
@@ -294,23 +307,21 @@ export default function DashboardPage() {
               <div className="h-32">
                 {playerData.length>1
                   ? <LineChart data={playerData} color="#007fd4" labels={playerData.map((_,i)=>i%Math.max(1,Math.floor(playerData.length/6))===0?HOURS[Math.round((i/playerData.length)*23)]:"")}/>
-                  : <div className="flex h-full items-center justify-center text-xs text-text-muted">Нет данных</div>
-                }
+                  : <div className="flex h-full items-center justify-center text-xs text-text-muted">Нет данных</div>}
               </div>
             </ChartCard>
             <ChartCard title="Коммиты за неделю">
               <div className="h-32"><BarChart data={data.commitActivity} color="#4ec9b0"/></div>
             </ChartCard>
             <ChartCard title="Uptime" className="flex flex-col">
-              <div className="relative flex h-32 items-center justify-center">
+              <div className="flex h-32 items-center justify-center">
                 <RingChart percent={data.uptimePercent} size={110} label="uptime"/>
               </div>
             </ChartCard>
           </div>
         );
 
-      case "oncall":
-        return <OnCallWidget />;
+      case "oncall": return <OnCallWidget />;
 
       case "deploys_summary":
         return (
@@ -340,15 +351,18 @@ export default function DashboardPage() {
               <div className="text-center"><p className="text-2xl font-bold text-warning">{activeIncidents.length}</p><p className="text-[10px] text-text-muted">Активных</p></div>
               <div className="text-center"><p className="text-2xl font-bold text-success">{data.incidents.filter(i=>i.status==="resolved").length}</p><p className="text-[10px] text-text-muted">Resolved</p></div>
               <div className="flex-1 space-y-1">
-                {(["P1","P2","P3","P4"] as const).map(sev=>{const c=data.incidents.filter(i=>i.severity===sev).length;return c>0?(
-                  <div key={sev} className="flex items-center gap-2 text-[10px]">
-                    <span className="w-5 text-text-muted">{sev}</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-surface-hover overflow-hidden">
-                      <div className={clsx("h-full rounded-full",sev==="P1"?"bg-error":sev==="P2"?"bg-warning":sev==="P3"?"bg-primary":"bg-text-muted")} style={{width:`${(c/data.incidents.length)*100}%`}}/>
+                {(["P1","P2","P3","P4"] as const).map(sev=>{
+                  const c=data.incidents.filter(i=>i.severity===sev).length;
+                  return c>0?(
+                    <div key={sev} className="flex items-center gap-2 text-[10px]">
+                      <span className="w-5 text-text-muted">{sev}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-surface-hover overflow-hidden">
+                        <div className={clsx("h-full rounded-full",sev==="P1"?"bg-error":sev==="P2"?"bg-warning":sev==="P3"?"bg-primary":"bg-text-muted")} style={{width:`${(c/data.incidents.length)*100}%`}}/>
+                      </div>
+                      <span className="text-text-muted w-3 text-right">{c}</span>
                     </div>
-                    <span className="text-text-muted w-3 text-right">{c}</span>
-                  </div>
-                ):null;})}
+                  ):null;
+                })}
               </div>
             </div>
           </div>
@@ -372,7 +386,7 @@ export default function DashboardPage() {
                   <span className="text-[10px] text-text-muted shrink-0">{new Date(log.createdAt).toLocaleString("ru-RU")}</span>
                 </div>
               ))}
-              {data.auditLogs.length===0 && <p className="px-4 py-4 text-center text-xs text-text-muted">Нет действий</p>}
+              {data.auditLogs.length===0&&<p className="px-4 py-4 text-center text-xs text-text-muted">Нет действий</p>}
             </div>
           </div>
         );
@@ -386,7 +400,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
         <div className="flex items-center gap-3">
@@ -417,9 +431,7 @@ export default function DashboardPage() {
 
           {editMode ? (
             <div className="flex items-center gap-2">
-              <button onClick={resetLayout} className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors">
-                Сбросить
-              </button>
+              <button onClick={resetLayout} className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors">Сбросить</button>
               <button onClick={cancelEdit} className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-text-secondary hover:text-text-primary transition-colors">
                 <X className="h-3.5 w-3.5"/> Отмена
               </button>
@@ -443,16 +455,16 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Edit mode hint ── */}
+      {/* Edit hint */}
       {editMode && (
-        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-xs text-primary">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-xs text-primary">
           <GripVertical className="h-4 w-4 shrink-0"/>
-          Перетаскивай блоки чтобы изменить порядок · кнопка <Eye className="h-3.5 w-3.5 inline mx-1"/> скрывает блок
+          <span>Перетаскивай блоки · меняй ширину <b>1/3 · 1/2 · Full</b> · кнопка <b>↕</b> делает блок компактным</span>
         </div>
       )}
 
-      {/* ── Widgets ── */}
-      <div className="space-y-4">
+      {/* Widget grid */}
+      <div className="grid grid-cols-12 gap-4 items-start">
         {activeLayout.map(w => {
           const meta = WIDGET_REGISTRY.find(r => r.id === w.id);
           if (!canSee(meta)) return null;
@@ -461,52 +473,98 @@ export default function DashboardPage() {
           const content = widgetContent(w.id);
           if (!content && !editMode) return null;
 
+          const colClass = COL_CLASS[w.cols] ?? "col-span-12";
+
           if (!editMode) {
-            return <div key={w.id}>{content}</div>;
+            return (
+              <div key={w.id} className={colClass}>
+                {w.compact
+                  ? <div className="max-h-[180px] overflow-hidden rounded-lg">{content}</div>
+                  : content
+                }
+              </div>
+            );
           }
 
-          // Edit mode: widget wrapped in draggable shell
+          // Edit mode wrapper
           return (
             <div
               key={w.id}
+              className={clsx(colClass, "group")}
               draggable
               onDragStart={e => onDragStart(e, w.id)}
               onDragEnd={onDragEnd}
               onDragOver={e => onDragOver(e, w.id)}
               onDrop={e => onDrop(e, w.id)}
-              className={clsx(
-                "group rounded-lg border-2 transition-colors",
-                w.visible
-                  ? "border-primary/30 bg-surface/50"
-                  : "border-border/40 bg-surface/30 opacity-50"
-              )}
             >
-              {/* Drag handle bar */}
-              <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2 cursor-grab active:cursor-grabbing select-none">
-                <GripVertical className="h-4 w-4 text-text-muted group-hover:text-text-secondary transition-colors"/>
-                <span className="flex-1 text-xs font-medium text-text-secondary">{meta?.label}</span>
-                {meta?.minRole && (
-                  <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-warning">
-                    {meta.minRole}+
-                  </span>
-                )}
-                <button
-                  onMouseDown={e => e.stopPropagation()}
-                  onClick={() => toggleVisible(w.id)}
-                  className="rounded p-1 text-text-muted hover:text-text-primary transition-colors"
-                  title={w.visible ? "Скрыть блок" : "Показать блок"}
-                >
-                  {w.visible ? <Eye className="h-3.5 w-3.5"/> : <EyeOff className="h-3.5 w-3.5"/>}
-                </button>
-              </div>
+              <div className={clsx(
+                "rounded-lg border-2 transition-colors",
+                w.visible ? "border-primary/35" : "border-border/40 opacity-50"
+              )}>
 
-              {/* Widget content (pointer-events off so drag works) */}
-              <div className="pointer-events-none p-0.5">
-                {content ?? (
-                  <div className="flex h-14 items-center justify-center text-xs text-text-muted italic">
-                    нет данных для отображения
+                {/* Handle bar */}
+                <div className="flex items-center gap-1.5 border-b border-border/50 bg-surface/80 px-2 py-1.5 cursor-grab active:cursor-grabbing select-none rounded-t-lg">
+                  <GripVertical className="h-4 w-4 text-text-muted shrink-0"/>
+                  <span className="flex-1 truncate text-[11px] font-medium text-text-secondary">{meta?.label}</span>
+
+                  {/* Width buttons */}
+                  <div className="flex items-center rounded border border-border overflow-hidden">
+                    {([4,6,12] as const).map(c => (
+                      <button
+                        key={c}
+                        onMouseDown={e => e.stopPropagation()}
+                        onClick={() => setCols(w.id, c)}
+                        className={clsx(
+                          "px-2 py-0.5 text-[10px] font-medium transition-colors border-r border-border last:border-r-0",
+                          w.cols === c
+                            ? "bg-primary text-white"
+                            : "text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                        )}
+                        title={c===12?"Полная ширина":c===6?"Половина ширины":"Треть ширины"}
+                      >
+                        {c===12?"Full":c===6?"½":"⅓"}
+                      </button>
+                    ))}
                   </div>
-                )}
+
+                  {/* Compact toggle */}
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => toggleCompact(w.id)}
+                    className={clsx(
+                      "rounded p-1 transition-colors",
+                      w.compact ? "text-primary bg-primary/10" : "text-text-muted hover:text-text-primary"
+                    )}
+                    title={w.compact ? "Развернуть" : "Компактный вид"}
+                  >
+                    {w.compact ? <Maximize2 className="h-3.5 w-3.5"/> : <Minus className="h-3.5 w-3.5"/>}
+                  </button>
+
+                  {/* Visible toggle */}
+                  {meta?.minRole && (
+                    <span className="rounded bg-warning/15 px-1 py-0.5 text-[9px] font-semibold uppercase text-warning">{meta.minRole}+</span>
+                  )}
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => toggleVisible(w.id)}
+                    className="rounded p-1 text-text-muted hover:text-text-primary transition-colors"
+                    title={w.visible ? "Скрыть" : "Показать"}
+                  >
+                    {w.visible ? <Eye className="h-3.5 w-3.5"/> : <EyeOff className="h-3.5 w-3.5"/>}
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className={clsx(
+                  "pointer-events-none overflow-hidden",
+                  w.compact && "max-h-[160px]"
+                )}>
+                  {content ?? (
+                    <div className="flex h-14 items-center justify-center text-xs text-text-muted italic px-4">
+                      нет данных
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -516,7 +574,7 @@ export default function DashboardPage() {
   );
 }
 
-// ─── Skeleton ────────────────────────────────────────────────────────────────
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function DashboardSkeleton() {
   return (
@@ -525,20 +583,11 @@ function DashboardSkeleton() {
         <div className="h-7 w-36 animate-pulse rounded bg-surface"/>
         <div className="h-5 w-48 animate-pulse rounded bg-surface"/>
       </div>
-      <div className="h-12 animate-pulse rounded-lg bg-surface"/>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[1,2,3,4].map(i=>(
-          <div key={i} className="rounded-lg border border-border bg-surface p-4 space-y-3">
-            <div className="h-4 w-28 animate-pulse rounded bg-surface-hover"/>
-            <div className="h-8 w-16 animate-pulse rounded bg-surface-hover"/>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {[1,2,3].map(i=>(
-          <div key={i} className="rounded-lg border border-border bg-surface p-4">
+      <div className="grid grid-cols-12 gap-4">
+        {[12,12,6,6].map((c,i)=>(
+          <div key={i} className={clsx(COL_CLASS[c], "rounded-lg border border-border bg-surface p-4")}>
             <div className="h-4 w-24 animate-pulse rounded bg-surface-hover mb-4"/>
-            <div className="h-32 animate-pulse rounded bg-surface-hover"/>
+            <div className="h-24 animate-pulse rounded bg-surface-hover"/>
           </div>
         ))}
       </div>
