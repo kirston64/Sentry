@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { hasRole } from "@/lib/rbac";
+import fs from "fs";
+import path from "path";
 
 export async function GET() {
   const session = await getSession();
@@ -51,14 +53,37 @@ export async function POST(request: Request) {
     },
   });
 
-  // Simulate async backup process
-  setTimeout(async () => {
-    const size = Math.floor(Math.random() * 500_000_000) + 50_000_000;
-    await prisma.backup.update({
-      where: { id: backup.id },
-      data: { status: "success", size, finishedAt: new Date() },
-    }).catch(() => {});
-  }, 3000);
+  // Async: copy the SQLite file as a real backup
+  setImmediate(async () => {
+    try {
+      const dbUrl = process.env.DATABASE_URL ?? "file:./prisma/dev.db";
+      const dbFile = dbUrl.replace(/^file:/, "");
+      const dbPath = path.isAbsolute(dbFile)
+        ? dbFile
+        : path.resolve(process.cwd(), dbFile.startsWith("./") ? dbFile.slice(2) : dbFile);
+
+      if (!dbPath.endsWith(".db") || !fs.existsSync(dbPath)) throw new Error("DB file not found");
+
+      const backupsDir = path.join(process.cwd(), "backups");
+      fs.mkdirSync(backupsDir, { recursive: true });
+
+      const filename = `backup-${backup.id}.db`;
+      const destPath = path.join(backupsDir, filename);
+      fs.copyFileSync(dbPath, destPath);
+
+      const stat = fs.statSync(destPath);
+      await prisma.backup.update({
+        where: { id: backup.id },
+        data: { status: "success", size: stat.size, path: destPath, finishedAt: new Date() },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "unknown error";
+      await prisma.backup.update({
+        where: { id: backup.id },
+        data: { status: "failed", finishedAt: new Date(), notes: `Error: ${msg}` },
+      }).catch(() => {});
+    }
+  });
 
   return NextResponse.json(backup);
 }
