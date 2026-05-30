@@ -25,6 +25,15 @@ interface TGUpdate {
 
 export async function POST(request: Request) {
   try {
+    // Verify Telegram webhook secret token (set via TELEGRAM_WEBHOOK_SECRET env var)
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const incoming = request.headers.get("x-telegram-bot-api-secret-token");
+      if (incoming !== webhookSecret) {
+        return NextResponse.json({ ok: true }); // silently ignore unauthorized requests
+      }
+    }
+
     const update: TGUpdate = await request.json();
     const msg = update.message;
     if (!msg?.text) return NextResponse.json({ ok: true });

@@ -13,8 +13,8 @@
     "prepare-electron": "node scripts/prepare-electron.mjs"
   },
   "build": {
-    "appId": "com.sentry.dashboard",
-    "productName": "Sentry Dashboard",
+    "appId": "com.forge.dashboard",
+    "productName": "Forge Dashboard",
     "directories": {
       "output": "dist-electron"
     },

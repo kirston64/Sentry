@@ -10,6 +10,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Cleanup expired sessions
+  await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } }).catch(() => {});
+
   const [servers, thresholds] = await Promise.all([
     prisma.server.findMany(),
     prisma.alertThreshold.findMany(),

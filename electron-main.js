@@ -39,7 +39,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
-    title: "Sentry DevOps Dashboard",
+    title: "Forge DevOps Dashboard",
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
