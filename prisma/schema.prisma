@@ -63,6 +63,7 @@ model User {
   uploadedFiles    ChatAttachment[]  @relation("UploadedFiles")
   messageReactions MessageReaction[]
   dashboardLayout  DashboardLayout?
+  workSessions     WorkSession[]
 }
 
 model Session {
@@ -554,6 +555,30 @@ model OnCallAssignment {
 
   user    User @relation("OnCallUser",    fields: [userId],    references: [id], onDelete: Cascade)
   creator User @relation("OnCallCreator", fields: [createdBy], references: [id])
+}
+
+// ============ WORK TIME TRACKING ============
+
+model WorkSession {
+  id        String    @id @default(cuid())
+  userId    String
+  date      String    // YYYY-MM-DD
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  status    String    @default("working") // working | on_break | ended
+  note      String?
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  breaks    WorkBreak[]
+}
+
+model WorkBreak {
+  id        String    @id @default(cuid())
+  sessionId String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  session   WorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 // ============ DASHBOARD LAYOUT ============

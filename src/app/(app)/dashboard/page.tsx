@@ -6,6 +6,7 @@ import { ServerStatusWidget } from "@/components/dashboard/server-status-widget"
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { FailedLoginsAlert } from "@/components/dashboard/failed-logins-alert";
 import { OnCallWidget } from "@/components/dashboard/oncall-widget";
+import { WorkTimer } from "@/components/dashboard/work-timer";
 import { ChartCard } from "@/components/charts/chart-card";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -37,6 +38,7 @@ const WIDGET_REGISTRY: WidgetMeta[] = [
   { id: "oncall",            label: "Дежурство",          minRole: null    },
   { id: "deploys_summary",   label: "Сводка деплоев",     minRole: null    },
   { id: "incidents_summary", label: "Сводка инцидентов",  minRole: null    },
+  { id: "work_timer",        label: "Рабочее время",       minRole: null    },
   { id: "failed_logins",     label: "Неудачные входы",    minRole: "admin" },
   { id: "activity",          label: "Аудит / Активность", minRole: "admin" },
 ];
@@ -60,8 +62,9 @@ const DEFAULT_LAYOUT: WidgetItem[] = [
   { id: "oncall",            visible: true, order: 5, cols: 6,  compact: false },
   { id: "deploys_summary",   visible: true, order: 6, cols: 6,  compact: false },
   { id: "incidents_summary", visible: true, order: 7, cols: 6,  compact: false },
-  { id: "failed_logins",     visible: true, order: 8, cols: 12, compact: false },
-  { id: "activity",          visible: true, order: 9, cols: 12, compact: false },
+  { id: "work_timer",        visible: true, order: 5, cols: 6,  compact: false },
+  { id: "failed_logins",     visible: true, order: 9, cols: 12, compact: false },
+  { id: "activity",          visible: true, order: 10, cols: 12, compact: false },
 ];
 
 // ─── Data types ───────────────────────────────────────────────────────────────
@@ -354,6 +357,7 @@ export default function DashboardPage() {
         );
 
       case "oncall": return <OnCallWidget />;
+      case "work_timer": return <WorkTimer />;
 
       case "deploys_summary":
         return (
